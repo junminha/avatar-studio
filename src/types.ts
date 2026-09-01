@@ -2,13 +2,35 @@ export type Scene = 'studio' | 'sunset' | 'day' | 'cyber'
 export type MotionName = 'idle' | 'wave' | 'dance' | 'jump' | 'cross'
 export type HairStyle = 'crop' | 'wave' | 'bob' | 'spike'
 export type RobotSide = 'none' | 'left' | 'right'
+export type AvatarConcept = 'classic' | 'woman' | 'robot' | 'athlete' | 'explorer' | 'alien'
+export type BodyBuild = 'slim' | 'balanced' | 'broad'
+export type FaceShape = 'round' | 'oval' | 'angular'
+export type EyeStyle = 'round' | 'happy' | 'sparkle' | 'focused'
+export type MouthStyle = 'smile' | 'neutral' | 'open'
+export type OutfitStyle = 'tee' | 'jacket' | 'overalls' | 'tunic'
+export type SleeveStyle = 'none' | 'short' | 'long'
+export type BottomStyle = 'pants' | 'shorts' | 'skirt'
+export type ShoeStyle = 'sneakers' | 'boots' | 'flats'
+export type AccessoryStyle = 'none' | 'glasses' | 'headphones' | 'scarf'
 
 export interface AvatarOptions {
+  concept: AvatarConcept
   skin: string
   hair: string
   shirt: string
   trousers: string
+  accent: string
+  shoes: string
   hairStyle: HairStyle
+  bodyBuild: BodyBuild
+  faceShape: FaceShape
+  eyeStyle: EyeStyle
+  mouthStyle: MouthStyle
+  outfitStyle: OutfitStyle
+  sleeveStyle: SleeveStyle
+  bottomStyle: BottomStyle
+  shoeStyle: ShoeStyle
+  accessory: AccessoryStyle
   scene: Scene
   motion: MotionName
   robot: RobotSide

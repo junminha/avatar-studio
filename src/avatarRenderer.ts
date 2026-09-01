@@ -69,7 +69,7 @@ function drawBackground(ctx: Ctx, width: number, height: number, scene: AvatarOp
 }
 
 function drawRobot(ctx: Ctx, x: number, y: number, t: number, pose?: RobotPose | null) {
-  const bob = pose ? 0 : Math.sin(t * 0.003) * 4
+  const bob = 0
   const leftUpperArm = pose?.leftUpperArm ?? 0.25
   const leftForearm = pose?.leftForearm ?? 0.25
   const rightUpperArm = pose?.rightUpperArm ?? -0.25
@@ -138,9 +138,9 @@ function drawRobot(ctx: Ctx, x: number, y: number, t: number, pose?: RobotPose |
 function motionPose(motion: AvatarOptions['motion'], t: number) {
   const beat = t * 0.004
   const base = {
-    bob: Math.sin(beat) * 2.5,
-    body: Math.sin(beat * 0.55) * 0.018,
-    head: Math.sin(beat * 0.55) * 0.025,
+    bob: 0,
+    body: 0,
+    head: 0,
     neck: 0,
     armL: -0.04,
     forearmL: -0.04,
@@ -164,7 +164,6 @@ function motionPose(motion: AvatarOptions['motion'], t: number) {
   if (motion === 'wave') {
     return {
       ...base,
-      bob: Math.sin(beat) * 1.5,
       armR: -2.25,
       forearmR: -2.8 + Math.sin(beat * 2) * 0.32,
       handR: -1.3 + Math.sin(beat * 2) * 0.35,
@@ -176,7 +175,6 @@ function motionPose(motion: AvatarOptions['motion'], t: number) {
   if (motion === 'dance') {
     return {
       ...base,
-      bob: -Math.abs(Math.sin(beat * 1.7)) * 12,
       body: Math.sin(beat) * 0.11,
       head: -Math.sin(beat) * 0.08,
       armL: -0.72 + Math.sin(beat) * 0.52,
@@ -214,7 +212,6 @@ function motionPose(motion: AvatarOptions['motion'], t: number) {
   if (motion === 'cross') {
     return {
       ...base,
-      bob: Math.sin(beat) * 1.2,
       armL: -0.44,
       forearmL: -1.4,
       handL: 0.05,
@@ -256,69 +253,123 @@ function articulatedLimb(
   upperAngle: number,
   lowerAngle: number,
   color: string,
+  lowerWidth = width,
+  outlineColor = 'rgba(25, 45, 38, .14)',
 ) {
   const elbowX = x - Math.sin(upperAngle) * upperLength
   const elbowY = y + Math.cos(upperAngle) * upperLength
   const endX = elbowX - Math.sin(lowerAngle) * lowerLength
   const endY = elbowY + Math.cos(lowerAngle) * lowerLength
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
+  const normal = (fromX: number, fromY: number, toX: number, toY: number) => {
+    const distance = Math.hypot(toX - fromX, toY - fromY) || 1
+    return { x: -(toY - fromY) / distance, y: (toX - fromX) / distance }
+  }
+  const upperNormal = normal(x, y, elbowX, elbowY)
+  const lowerNormal = normal(elbowX, elbowY, endX, endY)
+  const normalSumLength = Math.hypot(upperNormal.x + lowerNormal.x, upperNormal.y + lowerNormal.y)
+  const joinNormal = normalSumLength > .2
+    ? { x: (upperNormal.x + lowerNormal.x) / normalSumLength, y: (upperNormal.y + lowerNormal.y) / normalSumLength }
+    : upperNormal
+  const joinHalfWidth = (width + lowerWidth) / 4
+  const joinAlignment = Math.max(.55, Math.abs(joinNormal.x * upperNormal.x + joinNormal.y * upperNormal.y))
+  const joinOffset = Math.min(joinHalfWidth / joinAlignment, joinHalfWidth * 1.45)
+  const upperHalfWidth = width / 2
+  const lowerHalfWidth = lowerWidth / 2
+
   ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(elbowX, elbowY)
-  ctx.lineTo(endX, endY)
-  ctx.strokeStyle = 'rgba(25, 45, 38, .14)'
-  ctx.lineWidth = width + 3
-  ctx.stroke()
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(elbowX, elbowY)
-  ctx.lineTo(endX, endY)
-  ctx.strokeStyle = color
-  ctx.lineWidth = width
-  ctx.stroke()
+  ctx.moveTo(x + upperNormal.x * upperHalfWidth, y + upperNormal.y * upperHalfWidth)
+  ctx.lineTo(elbowX + joinNormal.x * joinOffset, elbowY + joinNormal.y * joinOffset)
+  ctx.lineTo(endX + lowerNormal.x * lowerHalfWidth, endY + lowerNormal.y * lowerHalfWidth)
+  ctx.lineTo(endX - lowerNormal.x * lowerHalfWidth, endY - lowerNormal.y * lowerHalfWidth)
+  ctx.lineTo(elbowX - joinNormal.x * joinOffset, elbowY - joinNormal.y * joinOffset)
+  ctx.lineTo(x - upperNormal.x * upperHalfWidth, y - upperNormal.y * upperHalfWidth)
+  ctx.closePath()
   ctx.fillStyle = color
-  ctx.beginPath()
-  ctx.arc(elbowX, elbowY, width * 0.48, 0, Math.PI * 2)
   ctx.fill()
-  ctx.strokeStyle = 'rgba(25, 45, 38, .12)'
-  ctx.lineWidth = 1.25
-  ctx.stroke()
+  if (outlineColor !== 'transparent') {
+    ctx.strokeStyle = outlineColor
+    ctx.lineWidth = 1.25
+    ctx.lineJoin = 'round'
+    ctx.stroke()
+  }
   return { jointX: elbowX, jointY: elbowY, x: endX, y: endY }
 }
 
 function drawHair(ctx: Ctx, style: AvatarOptions['hairStyle'], color: string) {
+  ctx.save()
   ctx.fillStyle = color
   if (style === 'crop') {
     ctx.beginPath()
-    ctx.ellipse(0, -6, 34, 29, 0, Math.PI, Math.PI * 2)
-    ctx.lineTo(31, -1)
-    ctx.quadraticCurveTo(4, -20, -31, 1)
+    ctx.moveTo(-27, -3)
+    ctx.bezierCurveTo(-28, -22, -17, -35, 0, -36)
+    ctx.bezierCurveTo(18, -36, 28, -22, 27, -3)
+    ctx.quadraticCurveTo(18, -11, 9, -8)
+    ctx.quadraticCurveTo(1, -14, -7, -9)
+    ctx.quadraticCurveTo(-17, -13, -27, -3)
     ctx.closePath()
     ctx.fill()
   } else if (style === 'wave') {
-    for (let i = -3; i <= 3; i++) {
-      ctx.beginPath()
-      ctx.arc(i * 9.7, -12 + Math.abs(i) * 1.6, 13, Math.PI, Math.PI * 2)
-      ctx.fill()
-    }
+    ctx.beginPath()
+    ctx.moveTo(-28, -2)
+    ctx.bezierCurveTo(-29, -23, -17, -37, 0, -38)
+    ctx.bezierCurveTo(19, -38, 30, -23, 28, -2)
+    ctx.bezierCurveTo(23, -8, 18, -4, 14, -10)
+    ctx.bezierCurveTo(10, -14, 5, -7, 0, -12)
+    ctx.bezierCurveTo(-5, -16, -10, -8, -15, -11)
+    ctx.bezierCurveTo(-21, -14, -24, -6, -28, -2)
+    ctx.closePath()
+    ctx.fill()
   } else if (style === 'bob') {
     ctx.beginPath()
-    ctx.ellipse(0, 0, 39, 42, 0, Math.PI, Math.PI * 2)
-    ctx.fillRect(-39, -2, 11, 47)
-    ctx.fillRect(28, -2, 11, 47)
+    ctx.moveTo(-29, 2)
+    ctx.bezierCurveTo(-30, -22, -18, -37, 0, -38)
+    ctx.bezierCurveTo(19, -38, 31, -22, 29, 2)
+    ctx.quadraticCurveTo(18, -9, 3, -11)
+    ctx.quadraticCurveTo(-10, -14, -29, 2)
+    ctx.closePath()
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(-29, -5)
+    ctx.quadraticCurveTo(-32, 15, -27, 30)
+    ctx.quadraticCurveTo(-23, 36, -18, 30)
+    ctx.quadraticCurveTo(-19, 11, -17, 1)
+    ctx.closePath()
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(29, -5)
+    ctx.quadraticCurveTo(32, 15, 27, 30)
+    ctx.quadraticCurveTo(23, 36, 18, 30)
+    ctx.quadraticCurveTo(19, 11, 17, 1)
+    ctx.closePath()
+    ctx.fill()
   } else {
     ctx.beginPath()
-    ctx.moveTo(-33, 1)
-    ctx.lineTo(-28, -33)
-    ctx.lineTo(-14, -14)
-    ctx.lineTo(-2, -41)
-    ctx.lineTo(10, -14)
-    ctx.lineTo(27, -32)
-    ctx.lineTo(33, 3)
+    ctx.moveTo(-28, -2)
+    ctx.quadraticCurveTo(-29, -15, -25, -27)
+    ctx.lineTo(-18, -22)
+    ctx.lineTo(-14, -36)
+    ctx.lineTo(-6, -27)
+    ctx.lineTo(1, -40)
+    ctx.lineTo(8, -27)
+    ctx.lineTo(18, -35)
+    ctx.lineTo(19, -22)
+    ctx.lineTo(27, -27)
+    ctx.quadraticCurveTo(30, -14, 28, -2)
+    ctx.quadraticCurveTo(17, -11, 7, -8)
+    ctx.quadraticCurveTo(-4, -14, -12, -9)
+    ctx.quadraticCurveTo(-20, -12, -28, -2)
     ctx.closePath()
     ctx.fill()
   }
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, .13)'
+  ctx.lineWidth = 1.4
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(-18, -28)
+  ctx.bezierCurveTo(-10, -34, -1, -35, 7, -32)
+  ctx.stroke()
+  ctx.restore()
 }
 
 function drawHand(ctx: Ctx, x: number, y: number, angle: number, color: string, spread: number) {
@@ -329,13 +380,115 @@ function drawHand(ctx: Ctx, x: number, y: number, angle: number, color: string, 
   ctx.strokeStyle = 'rgba(25, 45, 38, .14)'
   ctx.lineWidth = 1.2
   ctx.beginPath()
-  ctx.ellipse(0, 0, 10 + spread * 3.5, 7.5, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, 8 + spread * 2.4, 6.3, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.stroke()
   ctx.beginPath()
-  ctx.ellipse(-2, 7, 4.5, 6, 0.55, 0, Math.PI * 2)
+  ctx.ellipse(-1.5, 5.5, 3.6, 5, 0.55, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
+}
+
+function drawArticulatedArm(
+  ctx: Ctx,
+  shoulderX: number,
+  shoulderY: number,
+  upperAngle: number,
+  lowerAngle: number,
+  handAngle: number,
+  handSpread: number,
+  angleCorrection: number,
+  skin: string,
+  upperLength: number,
+  lowerLength: number,
+  upperWidth: number,
+  lowerWidth: number,
+  mechanical = false,
+  accent = 'rgba(25, 45, 38, .14)',
+  sleeveStyle: AvatarOptions['sleeveStyle'] = 'none',
+  shirt = skin,
+  clothingAccent = shirt,
+) {
+  const correctedUpperAngle = upperAngle - angleCorrection
+  const shoulderInset = 6
+  const armStartX = shoulderX - Math.sin(correctedUpperAngle) * shoulderInset
+  const armStartY = shoulderY + Math.cos(correctedUpperAngle) * shoulderInset
+  const hand = articulatedLimb(
+    ctx,
+    armStartX,
+    armStartY,
+    upperLength,
+    lowerLength,
+    upperWidth,
+    correctedUpperAngle,
+    lowerAngle - angleCorrection,
+    skin,
+    lowerWidth,
+    accent,
+  )
+  if (sleeveStyle === 'short') {
+    limb(ctx, armStartX, armStartY, upperLength * .36, upperWidth + 3, correctedUpperAngle, shirt)
+    ctx.save()
+    ctx.translate(armStartX, armStartY)
+    ctx.rotate(correctedUpperAngle)
+    ctx.globalAlpha = .58
+    ctx.strokeStyle = clothingAccent
+    ctx.lineWidth = 2
+    ctx.lineCap = 'butt'
+    ctx.beginPath()
+    ctx.moveTo(-(upperWidth + 3) * .48, upperLength * .34)
+    ctx.lineTo((upperWidth + 3) * .48, upperLength * .34)
+    ctx.stroke()
+    ctx.restore()
+  } else if (sleeveStyle === 'long') {
+    limb(ctx, armStartX, armStartY, upperLength, upperWidth + 2, correctedUpperAngle, shirt)
+    limb(ctx, hand.jointX, hand.jointY, Math.max(8, lowerLength - 8), lowerWidth + 2, lowerAngle - angleCorrection, shirt)
+    ctx.save()
+    ctx.translate(armStartX, armStartY)
+    ctx.rotate(correctedUpperAngle)
+    ctx.globalAlpha = .24
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo((upperWidth + 2) * .25, 8)
+    ctx.lineTo((upperWidth + 2) * .25, upperLength - 6)
+    ctx.stroke()
+    ctx.restore()
+    ctx.save()
+    ctx.translate(hand.jointX, hand.jointY)
+    ctx.rotate(lowerAngle - angleCorrection)
+    ctx.globalAlpha = .62
+    ctx.strokeStyle = clothingAccent
+    ctx.lineWidth = 2.2
+    ctx.lineCap = 'butt'
+    ctx.beginPath()
+    ctx.moveTo(-(lowerWidth + 2) * .48, Math.max(7, lowerLength - 10))
+    ctx.lineTo((lowerWidth + 2) * .48, Math.max(7, lowerLength - 10))
+    ctx.stroke()
+    ctx.restore()
+  }
+  if (mechanical) {
+    ctx.save()
+    ctx.translate(hand.x, hand.y)
+    ctx.rotate(handAngle - angleCorrection)
+    ctx.fillStyle = skin
+    ctx.strokeStyle = clothingAccent
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(0, 0, 7.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(-5, 5)
+    ctx.lineTo(-8, 10)
+    ctx.moveTo(5, 5)
+    ctx.lineTo(8, 10)
+    ctx.stroke()
+    ctx.restore()
+  } else {
+    drawHand(ctx, hand.x, hand.y, handAngle - angleCorrection, skin, handSpread)
+  }
+  return hand
 }
 
 function drawArm(
@@ -347,40 +500,819 @@ function drawArm(
   handSpread: number,
   angleCorrection: number,
   skin: string,
-  shirt: string,
 ) {
-  const hand = articulatedLimb(
-    ctx,
-    shoulderX,
-    -99,
-    52,
-    51,
-    16,
-    upperAngle - angleCorrection,
-    lowerAngle - angleCorrection,
-    skin,
-  )
-  drawHand(ctx, hand.x, hand.y, handAngle - angleCorrection, skin, handSpread)
-  ctx.fillStyle = shirt
-  ctx.strokeStyle = 'rgba(25, 45, 38, .1)'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.arc(shoulderX, -99, 13, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.stroke()
+  drawArticulatedArm(ctx, shoulderX, -103, upperAngle, lowerAngle, handAngle, handSpread, angleCorrection, skin, 50, 53, 14, 12)
 }
 
-function drawFoot(ctx: Ctx, x: number, y: number, angle: number) {
+function drawFoot(ctx: Ctx, x: number, y: number, angle: number, color = '#2d3935', mechanical = false, style: AvatarOptions['shoeStyle'] = 'sneakers') {
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(angle)
-  ctx.fillStyle = '#2d3935'
+  ctx.fillStyle = color
   ctx.strokeStyle = 'rgba(238, 248, 244, .24)'
   ctx.lineWidth = 1.2
   ctx.beginPath()
-  ctx.ellipse(8, 0, 22, 9.5, 0, 0, Math.PI * 2)
+  if (style === 'boots') roundedRect(ctx, -7, -14, 31, 23, mechanical ? 5 : 8)
+  else if (style === 'flats') ctx.ellipse(7, 1, 19, 6.5, 0, 0, Math.PI * 2)
+  else if (mechanical) roundedRect(ctx, -9, -7, 31, 14, 6)
+  else ctx.ellipse(8, 0, 21, 8.5, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.stroke()
+  if (style === 'sneakers') {
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'
+    ctx.lineWidth = 1.3
+    ctx.beginPath()
+    ctx.moveTo(-5, 4)
+    ctx.lineTo(24, 4)
+    ctx.moveTo(1, -4)
+    ctx.lineTo(8, 1)
+    ctx.moveTo(6, -5)
+    ctx.lineTo(13, 0)
+    ctx.moveTo(11, -5)
+    ctx.lineTo(18, -1)
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(17,35,30,.25)'
+    ctx.beginPath()
+    ctx.arc(18, 0, 7, -1.5, 1.25)
+    ctx.stroke()
+  } else if (style === 'boots') {
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'
+    ctx.beginPath()
+    ctx.moveTo(-5, -9)
+    ctx.lineTo(7, -9)
+    ctx.moveTo(-5, 4)
+    ctx.lineTo(23, 4)
+    ctx.moveTo(5, -8)
+    ctx.lineTo(5, 1)
+    ctx.stroke()
+  } else {
+    ctx.strokeStyle = 'rgba(255,255,255,.38)'
+    ctx.beginPath()
+    ctx.ellipse(3, -1, 8, 3.2, -.08, Math.PI, Math.PI * 2)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+interface AvatarGeometry {
+  shoulderX: number
+  shoulderY: number
+  torsoShoulder: number
+  waist: number
+  hip: number
+  headRx: number
+  headRy: number
+  headY: number
+  neckTop: number
+  hipX: number
+  upperLeg: number
+  lowerLeg: number
+  thighWidth: number
+  calfWidth: number
+  upperArm: number
+  lowerArm: number
+  upperArmWidth: number
+  forearmWidth: number
+}
+
+const avatarGeometry: Record<AvatarOptions['concept'], AvatarGeometry> = {
+  classic: { shoulderX: 45, shoulderY: -103, torsoShoulder: 49, waist: 35, hip: 38, headRx: 28, headRy: 34, headY: -152, neckTop: -121, hipX: 21, upperLeg: 69, lowerLeg: 67, thighWidth: 20, calfWidth: 16, upperArm: 50, lowerArm: 53, upperArmWidth: 14, forearmWidth: 12 },
+  woman: { shoulderX: 42, shoulderY: -105, torsoShoulder: 44, waist: 27, hip: 42, headRx: 29, headRy: 35, headY: -156, neckTop: -124, hipX: 22, upperLeg: 76, lowerLeg: 70, thighWidth: 18, calfWidth: 14, upperArm: 57, lowerArm: 58, upperArmWidth: 13, forearmWidth: 10 },
+  robot: { shoulderX: 46, shoulderY: -96, torsoShoulder: 48, waist: 38, hip: 40, headRx: 31, headRy: 30, headY: -146, neckTop: -117, hipX: 22, upperLeg: 64, lowerLeg: 62, thighWidth: 18, calfWidth: 14, upperArm: 48, lowerArm: 50, upperArmWidth: 13, forearmWidth: 11 },
+  athlete: { shoulderX: 52, shoulderY: -108, torsoShoulder: 56, waist: 36, hip: 40, headRx: 27, headRy: 32, headY: -155, neckTop: -125, hipX: 23, upperLeg: 72, lowerLeg: 68, thighWidth: 23, calfWidth: 17, upperArm: 54, lowerArm: 54, upperArmWidth: 17, forearmWidth: 13 },
+  explorer: { shoulderX: 48, shoulderY: -88, torsoShoulder: 54, waist: 44, hip: 48, headRx: 30, headRy: 33, headY: -137, neckTop: -109, hipX: 24, upperLeg: 55, lowerLeg: 52, thighWidth: 23, calfWidth: 18, upperArm: 43, lowerArm: 45, upperArmWidth: 17, forearmWidth: 14 },
+  alien: { shoulderX: 34, shoulderY: -88, torsoShoulder: 36, waist: 25, hip: 30, headRx: 34, headRy: 42, headY: -144, neckTop: -105, hipX: 15, upperLeg: 82, lowerLeg: 78, thighWidth: 12, calfWidth: 9, upperArm: 63, lowerArm: 67, upperArmWidth: 9, forearmWidth: 7 },
+}
+
+function drawBottomGarment(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
+  ctx.save()
+  ctx.fillStyle = options.trousers
+  if (options.bottomStyle === 'skirt') {
+    ctx.beginPath()
+    ctx.moveTo(-geometry.hip + 4, -16)
+    ctx.lineTo(-geometry.hip - 7, 28)
+    ctx.quadraticCurveTo(0, 36, geometry.hip + 7, 28)
+    ctx.lineTo(geometry.hip - 4, -16)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,.38)'
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.moveTo(-geometry.hip + 8, -11)
+    ctx.quadraticCurveTo(0, -7, geometry.hip - 8, -11)
+    ctx.moveTo(-geometry.hip + 3, 25)
+    ctx.quadraticCurveTo(0, 32, geometry.hip - 3, 25)
+    ctx.moveTo(-geometry.hip * .42, -6)
+    ctx.lineTo(-geometry.hip * .25, 27)
+    ctx.moveTo(geometry.hip * .42, -6)
+    ctx.lineTo(geometry.hip * .25, 27)
+    ctx.stroke()
+  } else {
+    roundedRect(ctx, -geometry.hip, -11, geometry.hip * 2, options.bottomStyle === 'shorts' ? 25 : 19, 8)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(255,255,255,.34)'
+    ctx.lineWidth = 1.3
+    ctx.beginPath()
+    ctx.moveTo(-geometry.hip + 5, -7)
+    ctx.lineTo(geometry.hip - 5, -7)
+    ctx.moveTo(0, -6)
+    ctx.lineTo(0, options.bottomStyle === 'shorts' ? 11 : 6)
+    ctx.moveTo(-geometry.hip + 8, -2)
+    ctx.quadraticCurveTo(-geometry.hip * .35, 6, -7, 4)
+    ctx.moveTo(geometry.hip - 8, -2)
+    ctx.quadraticCurveTo(geometry.hip * .35, 6, 7, 4)
+    if (options.bottomStyle === 'shorts') {
+      ctx.moveTo(-geometry.hip + 3, 10)
+      ctx.lineTo(-4, 10)
+      ctx.moveTo(geometry.hip - 3, 10)
+      ctx.lineTo(4, 10)
+    }
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawTorso(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
+  const top = geometry.shoulderY
+  drawBottomGarment(ctx, options, geometry)
+  if (options.concept === 'robot') {
+    ctx.fillStyle = options.shirt
+    ctx.strokeStyle = options.hair
+    ctx.lineWidth = 4
+    roundedRect(ctx, -geometry.torsoShoulder, top, geometry.torsoShoulder * 2, -top, 17)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = options.skin
+    roundedRect(ctx, -29, top + 17, 58, Math.max(40, -top - 45), 12)
+    ctx.fill()
+    ctx.fillStyle = options.accent
+    ctx.beginPath()
+    ctx.arc(0, top * .54, 9, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(-17, -22)
+    ctx.lineTo(17, -22)
+    ctx.moveTo(-22, top + 26)
+    ctx.lineTo(-22, -35)
+    ctx.moveTo(22, top + 26)
+    ctx.lineTo(22, -35)
+    ctx.stroke()
+    ctx.save()
+    ctx.globalAlpha = .48
+    ctx.strokeStyle = options.hair
+    ctx.lineWidth = 1.4
+    for (let y = top + 27; y < top + 55; y += 8) {
+      ctx.beginPath()
+      ctx.moveTo(-40, y)
+      ctx.lineTo(-32, y)
+      ctx.moveTo(32, y)
+      ctx.lineTo(40, y)
+      ctx.stroke()
+    }
+    ctx.restore()
+    if (options.outfitStyle === 'tee') {
+      ctx.save()
+      ctx.globalAlpha = .55
+      ctx.strokeStyle = options.accent
+      ctx.lineWidth = 3
+      ctx.beginPath()
+      ctx.moveTo(-25, top + 12)
+      ctx.lineTo(25, top + 12)
+      ctx.stroke()
+      ctx.restore()
+    } else if (options.outfitStyle === 'jacket') {
+      ctx.save()
+      ctx.globalAlpha = .7
+      ctx.fillStyle = options.accent
+      ctx.beginPath()
+      ctx.moveTo(-geometry.torsoShoulder + 6, top + 8)
+      ctx.lineTo(-6, top + 34)
+      ctx.lineTo(-18, top + 44)
+      ctx.lineTo(-34, top + 17)
+      ctx.closePath()
+      ctx.fill()
+      ctx.beginPath()
+      ctx.moveTo(geometry.torsoShoulder - 6, top + 8)
+      ctx.lineTo(6, top + 34)
+      ctx.lineTo(18, top + 44)
+      ctx.lineTo(34, top + 17)
+      ctx.closePath()
+      ctx.fill()
+      ctx.restore()
+      ctx.strokeStyle = options.hair
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(0, top + 18)
+      ctx.lineTo(0, -8)
+      ctx.stroke()
+    } else if (options.outfitStyle === 'overalls') {
+      ctx.strokeStyle = options.hair
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(-30, top + 11)
+      ctx.lineTo(-15, -48)
+      ctx.moveTo(30, top + 11)
+      ctx.lineTo(15, -48)
+      ctx.stroke()
+      ctx.fillStyle = options.hair
+      roundedRect(ctx, -23, -53, 46, 31, 6)
+      ctx.fill()
+      ctx.strokeStyle = options.accent
+      ctx.lineWidth = 1.5
+      roundedRect(ctx, -14, -43, 28, 12, 3)
+      ctx.stroke()
+    } else {
+      ctx.save()
+      ctx.globalAlpha = .84
+      ctx.fillStyle = options.accent
+      ctx.beginPath()
+      ctx.moveTo(-24, top + 23)
+      ctx.lineTo(24, top + 23)
+      ctx.lineTo(31, -2)
+      ctx.lineTo(0, 12)
+      ctx.lineTo(-31, -2)
+      ctx.closePath()
+      ctx.fill()
+      ctx.restore()
+      ctx.fillStyle = options.hair
+      roundedRect(ctx, -30, -25, 60, 7, 3)
+      ctx.fill()
+    }
+  } else {
+    ctx.fillStyle = options.shirt
+    ctx.beginPath()
+    ctx.moveTo(-geometry.torsoShoulder, top)
+    ctx.quadraticCurveTo(-geometry.torsoShoulder - 2, top + 15, -geometry.torsoShoulder + 5, top + 31)
+    ctx.quadraticCurveTo(-geometry.waist - 4, top * .42, -geometry.hip, -6)
+    ctx.quadraticCurveTo(0, 5, geometry.hip, -6)
+    ctx.quadraticCurveTo(geometry.waist + 4, top * .42, geometry.torsoShoulder - 5, top + 31)
+    ctx.quadraticCurveTo(geometry.torsoShoulder + 2, top + 15, geometry.torsoShoulder, top)
+    ctx.quadraticCurveTo(0, top - 11, -geometry.torsoShoulder, top)
+    ctx.closePath()
+    ctx.fill()
+
+    ctx.save()
+    ctx.globalAlpha = .18
+    ctx.fillStyle = '#ffffff'
+    ctx.beginPath()
+    ctx.moveTo(-geometry.torsoShoulder + 4, top + 4)
+    ctx.quadraticCurveTo(-geometry.waist + 6, top + 40, -geometry.hip + 7, -8)
+    ctx.lineTo(-geometry.hip + 16, -7)
+    ctx.quadraticCurveTo(-geometry.waist + 18, top + 40, -geometry.torsoShoulder + 17, top + 9)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+
+    ctx.strokeStyle = 'rgba(255,255,255,.34)'
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.moveTo(-geometry.hip + 6, -10)
+    ctx.quadraticCurveTo(0, -6, geometry.hip - 6, -10)
+    ctx.stroke()
+
+    if (options.outfitStyle === 'tee') {
+      ctx.strokeStyle = options.accent
+      ctx.lineWidth = 2.4
+      ctx.beginPath()
+      ctx.arc(0, top + 1, 14, .12, Math.PI - .12)
+      ctx.stroke()
+      ctx.save()
+      ctx.globalAlpha = .42
+      ctx.fillStyle = options.accent
+      roundedRect(ctx, geometry.waist * .18, top + 35, Math.min(18, geometry.waist * .5), 16, 4)
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255,255,255,.6)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(geometry.waist * .22, top + 40)
+      ctx.lineTo(geometry.waist * .62, top + 40)
+      ctx.stroke()
+      ctx.restore()
+    } else if (options.outfitStyle === 'jacket') {
+      ctx.save()
+      ctx.globalAlpha = .72
+      ctx.fillStyle = options.accent
+      ctx.beginPath()
+      ctx.moveTo(-geometry.torsoShoulder + 10, top + 7)
+      ctx.lineTo(-5, top + 35)
+      ctx.lineTo(-18, top + 45)
+      ctx.lineTo(-31, top + 15)
+      ctx.closePath()
+      ctx.fill()
+      ctx.beginPath()
+      ctx.moveTo(geometry.torsoShoulder - 10, top + 7)
+      ctx.lineTo(5, top + 35)
+      ctx.lineTo(18, top + 45)
+      ctx.lineTo(31, top + 15)
+      ctx.closePath()
+      ctx.fill()
+      ctx.restore()
+      ctx.strokeStyle = options.accent
+      ctx.lineWidth = 2.4
+      ctx.beginPath()
+      ctx.moveTo(0, top + 9)
+      ctx.lineTo(0, -10)
+      ctx.moveTo(-geometry.waist + 5, -33)
+      ctx.lineTo(-10, -29)
+      ctx.moveTo(geometry.waist - 5, -33)
+      ctx.lineTo(10, -29)
+      ctx.stroke()
+      ctx.fillStyle = options.accent
+      for (let y = top + 47; y < -14; y += 12) {
+        roundedRect(ctx, -1.5, y, 3, 4, 1)
+        ctx.fill()
+      }
+    } else if (options.outfitStyle === 'overalls') {
+      ctx.strokeStyle = options.trousers
+      ctx.lineWidth = 6
+      ctx.beginPath()
+      ctx.moveTo(-geometry.torsoShoulder + 11, top + 6)
+      ctx.lineTo(-18, -53)
+      ctx.moveTo(geometry.torsoShoulder - 11, top + 6)
+      ctx.lineTo(18, -53)
+      ctx.stroke()
+      ctx.fillStyle = options.trousers
+      roundedRect(ctx, -23, -58, 46, 43, 7)
+      ctx.fill()
+      ctx.save()
+      ctx.strokeStyle = 'rgba(255,255,255,.42)'
+      ctx.lineWidth = 1.2
+      ctx.setLineDash([3, 3])
+      roundedRect(ctx, -19, -54, 38, 35, 5)
+      ctx.stroke()
+      ctx.setLineDash([])
+      roundedRect(ctx, -12, -45, 24, 14, 4)
+      ctx.stroke()
+      ctx.restore()
+      ctx.fillStyle = options.accent
+      ctx.beginPath()
+      ctx.arc(-15, -50, 3, 0, Math.PI * 2)
+      ctx.arc(15, -50, 3, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (options.outfitStyle === 'tunic') {
+      const tunicHem = options.bottomStyle === 'skirt' ? -3 : 20
+      ctx.fillStyle = options.accent
+      ctx.beginPath()
+      ctx.moveTo(-geometry.hip, -22)
+      ctx.lineTo(-geometry.hip - 5, tunicHem)
+      ctx.quadraticCurveTo(0, tunicHem + 10, geometry.hip + 5, tunicHem)
+      ctx.lineTo(geometry.hip, -22)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = options.trousers
+      roundedRect(ctx, -geometry.waist, -29, geometry.waist * 2, 8, 4)
+      ctx.fill()
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(-9, top + 3)
+      ctx.lineTo(0, top + 16)
+      ctx.lineTo(9, top + 3)
+      ctx.moveTo(-geometry.hip + 2, tunicHem - 2)
+      ctx.quadraticCurveTo(0, tunicHem + 7, geometry.hip - 2, tunicHem - 2)
+      ctx.stroke()
+    }
+
+    if (options.concept === 'athlete' && options.outfitStyle === 'tee') {
+      ctx.strokeStyle = 'rgba(255,255,255,.52)'
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(-geometry.torsoShoulder + 9, top + 13)
+      ctx.lineTo(-geometry.waist + 4, -14)
+      ctx.moveTo(geometry.torsoShoulder - 9, top + 13)
+      ctx.lineTo(geometry.waist - 4, -14)
+      ctx.stroke()
+    } else if (options.concept === 'explorer') {
+      ctx.strokeStyle = options.trousers
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(-25, top + 6)
+      ctx.lineTo(26, -15)
+      ctx.stroke()
+      ctx.fillStyle = options.trousers
+      roundedRect(ctx, 12, top * .48, 21, 19, 5)
+      ctx.fill()
+    } else if (options.concept === 'alien') {
+      ctx.fillStyle = options.accent
+      roundedRect(ctx, -10, top * .52 - 8, 20, 16, 6)
+      ctx.fill()
+      ctx.fillStyle = options.hair
+      roundedRect(ctx, -4, top * .52 - 3, 8, 6, 2)
+      ctx.fill()
+    }
+  }
+
+}
+
+function drawRobotHead(ctx: Ctx, options: AvatarOptions) {
+  const halfWidth = options.faceShape === 'round' ? 30 : options.faceShape === 'angular' ? 33 : 29
+  const halfHeight = options.faceShape === 'round' ? 29 : options.faceShape === 'oval' ? 33 : 29
+  ctx.fillStyle = options.skin
+  ctx.strokeStyle = options.hair
+  ctx.lineWidth = 4
+  roundedRect(ctx, -halfWidth, -halfHeight, halfWidth * 2, halfHeight * 2, options.faceShape === 'angular' ? 8 : 14)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = options.hair
+  roundedRect(ctx, -22, -17, 44, 27, options.faceShape === 'angular' ? 4 : 8)
+  ctx.fill()
+  ctx.fillStyle = options.accent
+  ctx.strokeStyle = options.accent
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  if (options.eyeStyle === 'happy') {
+    ctx.arc(-9, -2, 5, Math.PI * 1.08, Math.PI * 1.92)
+    ctx.moveTo(14, -2)
+    ctx.arc(9, -2, 5, Math.PI * 1.08, Math.PI * 1.92)
+    ctx.stroke()
+  } else if (options.eyeStyle === 'sparkle') {
+    ctx.moveTo(-9, -10)
+    ctx.lineTo(-5, -4)
+    ctx.lineTo(-9, 2)
+    ctx.lineTo(-13, -4)
+    ctx.closePath()
+    ctx.arc(9, -4, 4, 0, Math.PI * 2)
+    ctx.fill()
+  } else if (options.eyeStyle === 'focused') {
+    roundedRect(ctx, -15, -7, 11, 6, 3)
+    ctx.fill()
+    roundedRect(ctx, 4, -7, 11, 6, 3)
+    ctx.fill()
+  } else {
+    ctx.arc(-9, -4, 4, 0, Math.PI * 2)
+    ctx.arc(9, -4, 4, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.beginPath()
+  if (options.mouthStyle === 'smile') ctx.arc(0, 12, 7, .15, Math.PI - .15)
+  else if (options.mouthStyle === 'open') ctx.ellipse(0, 13, 5, 7, 0, 0, Math.PI * 2)
+  else {
+    ctx.moveTo(-7, 14)
+    ctx.lineTo(7, 14)
+  }
+  if (options.mouthStyle === 'open') ctx.fill()
+  else ctx.stroke()
+
+  ctx.fillStyle = options.hair
+  if (options.hairStyle === 'crop') {
+    roundedRect(ctx, -20, -35, 40, 8, 4)
+    ctx.fill()
+  } else if (options.hairStyle === 'wave') {
+    for (let x = -16; x <= 16; x += 8) {
+      ctx.beginPath()
+      ctx.arc(x, -30, 6, Math.PI, Math.PI * 2)
+      ctx.fill()
+    }
+  } else if (options.hairStyle === 'bob') {
+    roundedRect(ctx, -37, -18, 8, 32, 4)
+    ctx.fill()
+    roundedRect(ctx, 29, -18, 8, 32, 4)
+    ctx.fill()
+  } else {
+    ctx.beginPath()
+    ctx.moveTo(-20, -28)
+    ctx.lineTo(-14, -40)
+    ctx.lineTo(-5, -31)
+    ctx.lineTo(2, -44)
+    ctx.lineTo(9, -31)
+    ctx.lineTo(18, -40)
+    ctx.lineTo(21, -28)
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  if (options.accessory === 'headphones') {
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.arc(0, -13, halfWidth + 6, Math.PI, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = options.accent
+    roundedRect(ctx, -halfWidth - 7, -12, 8, 22, 4)
+    ctx.fill()
+    roundedRect(ctx, halfWidth - 1, -12, 8, 22, 4)
+    ctx.fill()
+  } else if (options.accessory === 'glasses') {
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 2
+    roundedRect(ctx, -19, -12, 17, 16, 5)
+    ctx.stroke()
+    roundedRect(ctx, 2, -12, 17, 16, 5)
+    ctx.stroke()
+  }
+}
+
+function drawHumanHead(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
+  if (options.concept === 'alien') {
+    ctx.fillStyle = options.skin
+    ctx.beginPath()
+    ctx.moveTo(-geometry.headRx + 2, -6)
+    ctx.lineTo(-geometry.headRx - 12, -15)
+    ctx.quadraticCurveTo(-geometry.headRx - 8, 3, -geometry.headRx + 1, 8)
+    ctx.moveTo(geometry.headRx - 2, -6)
+    ctx.lineTo(geometry.headRx + 12, -15)
+    ctx.quadraticCurveTo(geometry.headRx + 8, 3, geometry.headRx - 1, 8)
+    ctx.fill()
+  } else {
+    ctx.fillStyle = options.skin
+    ctx.beginPath()
+    ctx.arc(-geometry.headRx + 1, 1, 5.5, 0, Math.PI * 2)
+    ctx.arc(geometry.headRx - 1, 1, 5.5, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  ctx.fillStyle = options.skin
+  ctx.beginPath()
+  if (options.faceShape === 'angular') {
+    ctx.moveTo(-geometry.headRx, -10)
+    ctx.quadraticCurveTo(-geometry.headRx + 2, -geometry.headRy, 0, -geometry.headRy)
+    ctx.quadraticCurveTo(geometry.headRx - 2, -geometry.headRy, geometry.headRx, -10)
+    ctx.lineTo(geometry.headRx - 4, 18)
+    ctx.lineTo(0, geometry.headRy)
+    ctx.lineTo(-geometry.headRx + 4, 18)
+    ctx.closePath()
+  } else {
+    const roundScale = options.faceShape === 'round' ? 1.08 : 1
+    ctx.ellipse(0, 0, geometry.headRx * roundScale, geometry.headRy * (options.faceShape === 'round' ? .94 : 1), 0, 0, Math.PI * 2)
+  }
+  ctx.fill()
+  ctx.save()
+  const hairScale = options.concept === 'alien' ? .92 : 1
+  ctx.scale((geometry.headRx / 28) * hairScale, (geometry.headRy / 34) * hairScale)
+  drawHair(ctx, options.hairStyle, options.hair)
+  ctx.restore()
+
+  if (options.concept === 'explorer') {
+    ctx.fillStyle = options.trousers
+    ctx.beginPath()
+    ctx.ellipse(0, -24, 30, 6, 0, Math.PI, Math.PI * 2)
+    ctx.fill()
+    roundedRect(ctx, -21, -35, 42, 13, 6)
+    ctx.fill()
+  }
+
+  const eyeX = options.concept === 'alien' ? 11 : 9.5
+  const eyeY = options.concept === 'alien' ? -4 : -3
+  const eyeRx = options.concept === 'alien' ? 5 : 2.4
+  const eyeRy = options.concept === 'alien' ? 8 : 3.8
+  ctx.fillStyle = '#26342f'
+  ctx.strokeStyle = '#26342f'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  if (options.eyeStyle === 'happy') {
+    ctx.arc(-eyeX, eyeY + 1, eyeRx + 2, Math.PI * 1.08, Math.PI * 1.92)
+    ctx.moveTo(eyeX + eyeRx + 2, eyeY + 1)
+    ctx.arc(eyeX, eyeY + 1, eyeRx + 2, Math.PI * 1.08, Math.PI * 1.92)
+    ctx.stroke()
+  } else if (options.eyeStyle === 'focused') {
+    ctx.moveTo(-eyeX - 4, eyeY - 4)
+    ctx.lineTo(-eyeX + 3, eyeY - 1)
+    ctx.moveTo(eyeX + 4, eyeY - 4)
+    ctx.lineTo(eyeX - 3, eyeY - 1)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.ellipse(-eyeX, eyeY + 2, eyeRx, eyeRy * .75, -.18, 0, Math.PI * 2)
+    ctx.ellipse(eyeX, eyeY + 2, eyeRx, eyeRy * .75, .18, 0, Math.PI * 2)
+    ctx.fill()
+  } else {
+    ctx.ellipse(-eyeX, eyeY, eyeRx, eyeRy, -.12, 0, Math.PI * 2)
+    ctx.ellipse(eyeX, eyeY, eyeRx, eyeRy, .12, 0, Math.PI * 2)
+    ctx.fill()
+    if (options.eyeStyle === 'sparkle') {
+      ctx.fillStyle = '#fff'
+      ctx.beginPath()
+      ctx.arc(-eyeX - eyeRx * .2, eyeY - eyeRy * .25, Math.max(1, eyeRx * .33), 0, Math.PI * 2)
+      ctx.arc(eyeX - eyeRx * .2, eyeY - eyeRy * .25, Math.max(1, eyeRx * .33), 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  if (options.concept === 'woman') {
+    ctx.strokeStyle = '#26342f'
+    ctx.lineWidth = 1.2
+    ctx.beginPath()
+    ctx.moveTo(-12, -6)
+    ctx.lineTo(-15, -8)
+    ctx.moveTo(12, -6)
+    ctx.lineTo(15, -8)
+    ctx.stroke()
+  } else if (options.concept === 'athlete') {
+    ctx.strokeStyle = options.shirt
+    ctx.lineWidth = 5
+    ctx.beginPath()
+    ctx.moveTo(-24, -12)
+    ctx.quadraticCurveTo(0, -7, 24, -12)
+    ctx.stroke()
+  }
+
+  if (options.concept !== 'alien') {
+    ctx.strokeStyle = 'rgba(92, 57, 47, .42)'
+    ctx.lineWidth = 1.3
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.quadraticCurveTo(-1.5, 5, 2, 5.5)
+    ctx.stroke()
+  }
+  ctx.strokeStyle = options.concept === 'alien' ? options.hair : '#7b3f42'
+  ctx.lineWidth = 2.1
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  const mouthY = options.concept === 'alien' ? 13 : 11
+  if (options.mouthStyle === 'smile') ctx.arc(0, mouthY, options.concept === 'alien' ? 6 : 8, .15, Math.PI - .15)
+  else if (options.mouthStyle === 'open') ctx.ellipse(0, mouthY + 2, 5, 7, 0, 0, Math.PI * 2)
+  else {
+    ctx.moveTo(-7, mouthY + 3)
+    ctx.lineTo(7, mouthY + 3)
+  }
+  if (options.mouthStyle === 'open') {
+    ctx.fillStyle = '#7b3f42'
+    ctx.fill()
+  } else ctx.stroke()
+
+  if (options.accessory === 'glasses') {
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.ellipse(-eyeX, eyeY, eyeRx + 6, eyeRy + 4, 0, 0, Math.PI * 2)
+    ctx.ellipse(eyeX, eyeY, eyeRx + 6, eyeRy + 4, 0, 0, Math.PI * 2)
+    ctx.moveTo(-3, eyeY)
+    ctx.lineTo(3, eyeY)
+    ctx.stroke()
+  } else if (options.accessory === 'headphones') {
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.arc(0, -8, geometry.headRx + 5, Math.PI, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = options.accent
+    roundedRect(ctx, -geometry.headRx - 7, -8, 8, 21, 4)
+    ctx.fill()
+    roundedRect(ctx, geometry.headRx - 1, -8, 8, 21, 4)
+    ctx.fill()
+  }
+}
+
+function drawJointAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: number, livePose?: LivePose | null) {
+  const scripted = motionPose(options.motion, t)
+  const isLive = Boolean(livePose && livePose.confidence > 0.42)
+  const pose = isLive && livePose ? {
+    bob: -livePose.hipLift * 220,
+    body: livePose.bodyLean,
+    head: livePose.headTilt,
+    neck: livePose.neckLean,
+    armL: livePose.leftUpperArm,
+    forearmL: livePose.leftForearm,
+    handL: livePose.leftHand,
+    handSpreadL: livePose.leftHandSpread,
+    armFrontL: livePose.leftArmFront,
+    armDepthL: livePose.leftArmDepth,
+    armR: livePose.rightUpperArm,
+    forearmR: livePose.rightForearm,
+    handR: livePose.rightHand,
+    handSpreadR: livePose.rightHandSpread,
+    armFrontR: livePose.rightArmFront,
+    armDepthR: livePose.rightArmDepth,
+    legL: livePose.leftUpperLeg,
+    lowerLegL: livePose.leftLowerLeg,
+    footL: livePose.leftFoot,
+    legR: livePose.rightUpperLeg,
+    lowerLegR: livePose.rightLowerLeg,
+    footR: livePose.rightFoot,
+  } : scripted
+  const baseGeometry = avatarGeometry[options.concept]
+  const buildScale = options.bodyBuild === 'slim' ? .88 : options.bodyBuild === 'broad' ? 1.12 : 1
+  const limbWidthScale = options.bodyBuild === 'slim' ? .86 : options.bodyBuild === 'broad' ? 1.14 : 1
+  const geometry: AvatarGeometry = {
+    ...baseGeometry,
+    shoulderX: baseGeometry.shoulderX * buildScale,
+    torsoShoulder: baseGeometry.torsoShoulder * buildScale,
+    waist: baseGeometry.waist * (options.bodyBuild === 'slim' ? .9 : options.bodyBuild === 'broad' ? 1.1 : 1),
+    hip: baseGeometry.hip * (options.bodyBuild === 'slim' ? .94 : options.bodyBuild === 'broad' ? 1.07 : 1),
+    hipX: baseGeometry.hipX * (options.bodyBuild === 'slim' ? .92 : options.bodyBuild === 'broad' ? 1.06 : 1),
+    thighWidth: baseGeometry.thighWidth * limbWidthScale,
+    calfWidth: baseGeometry.calfWidth * limbWidthScale,
+    upperArmWidth: baseGeometry.upperArmWidth * limbWidthScale,
+    forearmWidth: baseGeometry.forearmWidth * limbWidthScale,
+  }
+  const angleCorrection = isLive ? pose.body : 0
+  const mechanical = options.concept === 'robot'
+  const legColor = options.bottomStyle === 'pants' || mechanical ? options.trousers : options.skin
+  const limbOutline = 'transparent'
+  const groundY = geometry.upperLeg + geometry.lowerLeg + 14
+
+  ctx.save()
+  ctx.translate(x, y + pose.bob)
+  ctx.rotate(pose.body)
+
+  ctx.save()
+  ctx.globalAlpha = .16
+  ctx.fillStyle = '#17352b'
+  ctx.beginPath()
+  ctx.ellipse(0, groundY - pose.bob, (options.concept === 'explorer' ? 67 : 58) * buildScale, 11, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
+  const leftFoot = articulatedLimb(ctx, -geometry.hipX, 0, geometry.upperLeg, geometry.lowerLeg, geometry.thighWidth, pose.legL - angleCorrection, pose.lowerLegL - angleCorrection, legColor, geometry.calfWidth, limbOutline)
+  const rightFoot = articulatedLimb(ctx, geometry.hipX, 0, geometry.upperLeg, geometry.lowerLeg, geometry.thighWidth, pose.legR - angleCorrection, pose.lowerLegR - angleCorrection, legColor, geometry.calfWidth, limbOutline)
+  if (options.bottomStyle === 'shorts') {
+    limb(ctx, -geometry.hipX, 0, geometry.upperLeg * .36, geometry.thighWidth + 3, pose.legL - angleCorrection, options.trousers)
+    limb(ctx, geometry.hipX, 0, geometry.upperLeg * .36, geometry.thighWidth + 3, pose.legR - angleCorrection, options.trousers)
+    const drawShortCuff = (hipX: number, angle: number) => {
+      ctx.save()
+      ctx.translate(hipX, 0)
+      ctx.rotate(angle)
+      ctx.globalAlpha = .52
+      ctx.strokeStyle = options.accent
+      ctx.lineWidth = 2
+      ctx.lineCap = 'butt'
+      ctx.beginPath()
+      ctx.moveTo(-(geometry.thighWidth + 3) * .46, geometry.upperLeg * .34)
+      ctx.lineTo((geometry.thighWidth + 3) * .46, geometry.upperLeg * .34)
+      ctx.stroke()
+      ctx.restore()
+    }
+    drawShortCuff(-geometry.hipX, pose.legL - angleCorrection)
+    drawShortCuff(geometry.hipX, pose.legR - angleCorrection)
+  } else if (options.bottomStyle === 'pants') {
+    ctx.save()
+    ctx.globalAlpha = .2
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 1.2
+    ctx.lineCap = 'butt'
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    ctx.moveTo(-geometry.hipX, 7)
+    ctx.lineTo(leftFoot.jointX, leftFoot.jointY)
+    ctx.lineTo(leftFoot.x, leftFoot.y - 8)
+    ctx.moveTo(geometry.hipX, 7)
+    ctx.lineTo(rightFoot.jointX, rightFoot.jointY)
+    ctx.lineTo(rightFoot.x, rightFoot.y - 8)
+    ctx.stroke()
+    ctx.restore()
+  }
+  drawFoot(ctx, leftFoot.x, leftFoot.y, pose.footL - angleCorrection, options.shoes, mechanical, options.shoeStyle)
+  drawFoot(ctx, rightFoot.x, rightFoot.y, pose.footR - angleCorrection, options.shoes, mechanical, options.shoeStyle)
+
+  const arms = [
+    { shoulderX: -geometry.shoulderX, upper: pose.armL, lower: pose.forearmL, hand: pose.handL, spread: pose.handSpreadL, front: pose.armFrontL > .46, depth: pose.armDepthL },
+    { shoulderX: geometry.shoulderX, upper: pose.armR, lower: pose.forearmR, hand: pose.handR, spread: pose.handSpreadR, front: pose.armFrontR > .46, depth: pose.armDepthR },
+  ]
+  const paintArm = (arm: typeof arms[number]) => {
+    drawArticulatedArm(
+      ctx,
+      arm.shoulderX,
+      geometry.shoulderY,
+      arm.upper,
+      arm.lower,
+      arm.hand,
+      arm.spread,
+      angleCorrection,
+      options.skin,
+      geometry.upperArm,
+      geometry.lowerArm,
+      geometry.upperArmWidth,
+      geometry.forearmWidth,
+      mechanical,
+      limbOutline,
+      options.sleeveStyle,
+      options.shirt,
+      options.accent,
+    )
+  }
+  arms.filter((arm) => !arm.front).sort((a, b) => b.depth - a.depth).forEach(paintArm)
+
+  const headX = pose.neck * 24
+  ctx.strokeStyle = mechanical ? options.hair : options.skin
+  ctx.lineWidth = mechanical ? 12 : options.concept === 'alien' ? 10 : 14
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  ctx.moveTo(0, geometry.shoulderY - 4)
+  ctx.lineTo(headX * .55, geometry.neckTop)
+  ctx.stroke()
+
+  drawTorso(ctx, options, geometry)
+
+  if (options.accessory === 'scarf') {
+    ctx.fillStyle = options.accent
+    ctx.beginPath()
+    ctx.moveTo(-31, geometry.shoulderY - 1)
+    ctx.quadraticCurveTo(0, geometry.shoulderY + 19, 31, geometry.shoulderY - 1)
+    ctx.lineTo(20, geometry.shoulderY + 29)
+    ctx.lineTo(-4, geometry.shoulderY + 14)
+    ctx.closePath()
+    ctx.fill()
+  }
+
+  ctx.save()
+  ctx.translate(headX, geometry.headY)
+  ctx.rotate(pose.head - angleCorrection)
+  if (mechanical) drawRobotHead(ctx, options)
+  else drawHumanHead(ctx, options, geometry)
+  ctx.restore()
+
+  arms.filter((arm) => arm.front).sort((a, b) => b.depth - a.depth).forEach(paintArm)
   ctx.restore()
 }
 
@@ -420,19 +1352,19 @@ function drawAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: n
   ctx.globalAlpha = 0.16
   ctx.fillStyle = '#17352b'
   ctx.beginPath()
-  ctx.ellipse(0, 147 - pose.bob, 62, 13, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 151 - pose.bob, 59, 11, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
-  const leftFoot = articulatedLimb(ctx, -24, 0, 64, 62, 22, pose.legL - angleCorrection, pose.lowerLegL - angleCorrection, options.trousers)
-  const rightFoot = articulatedLimb(ctx, 24, 0, 64, 62, 22, pose.legR - angleCorrection, pose.lowerLegR - angleCorrection, options.trousers)
+  const leftFoot = articulatedLimb(ctx, -21, 0, 69, 67, 20, pose.legL - angleCorrection, pose.lowerLegL - angleCorrection, options.trousers, 16)
+  const rightFoot = articulatedLimb(ctx, 21, 0, 69, 67, 20, pose.legR - angleCorrection, pose.lowerLegR - angleCorrection, options.trousers, 16)
   drawFoot(ctx, leftFoot.x, leftFoot.y, pose.footL - angleCorrection)
   drawFoot(ctx, rightFoot.x, rightFoot.y, pose.footR - angleCorrection)
 
   const arms = [
     {
       side: 'left',
-      shoulderX: -44,
+      shoulderX: -45,
       upper: pose.armL,
       lower: pose.forearmL,
       hand: pose.handL,
@@ -442,7 +1374,7 @@ function drawAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: n
     },
     {
       side: 'right',
-      shoulderX: 44,
+      shoulderX: 45,
       upper: pose.armR,
       lower: pose.forearmR,
       hand: pose.handR,
@@ -460,67 +1392,66 @@ function drawAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: n
     arm.spread,
     angleCorrection,
     options.skin,
-    options.shirt,
   )
   arms.filter((arm) => !arm.front).sort((a, b) => b.depth - a.depth).forEach(paintArm)
 
   const headX = pose.neck * 24
   ctx.strokeStyle = options.skin
-  ctx.lineWidth = 18
+  ctx.lineWidth = 15
   ctx.lineCap = 'round'
   ctx.beginPath()
   ctx.moveTo(0, -108)
-  ctx.lineTo(headX * 0.55, -126)
+  ctx.lineTo(headX * 0.55, -121)
   ctx.stroke()
 
   ctx.fillStyle = options.shirt
   ctx.beginPath()
-  ctx.moveTo(-44, -100)
-  ctx.quadraticCurveTo(-51, -84, -42, -66)
-  ctx.lineTo(-34, -7)
-  ctx.quadraticCurveTo(0, 5, 34, -7)
-  ctx.lineTo(42, -66)
-  ctx.quadraticCurveTo(51, -84, 44, -100)
-  ctx.quadraticCurveTo(0, -112, -44, -100)
+  ctx.moveTo(-49, -103)
+  ctx.quadraticCurveTo(-51, -89, -45, -72)
+  ctx.quadraticCurveTo(-41, -39, -35, -6)
+  ctx.quadraticCurveTo(0, 5, 35, -6)
+  ctx.quadraticCurveTo(41, -39, 45, -72)
+  ctx.quadraticCurveTo(51, -89, 49, -103)
+  ctx.quadraticCurveTo(0, -114, -49, -103)
   ctx.closePath()
   ctx.fill()
   ctx.fillStyle = 'rgba(255,255,255,.16)'
-  roundedRect(ctx, -31, -92, 62, 11, 6)
+  roundedRect(ctx, -32, -91, 64, 9, 5)
   ctx.fill()
 
   ctx.fillStyle = options.trousers
-  roundedRect(ctx, -36, -10, 72, 19, 8)
-  ctx.fill()
-
-  ctx.fillStyle = options.shirt
-  ctx.beginPath()
-  ctx.arc(-44, -98, 13, 0, Math.PI * 2)
-  ctx.arc(44, -98, 13, 0, Math.PI * 2)
+  roundedRect(ctx, -38, -11, 76, 19, 8)
   ctx.fill()
 
   ctx.save()
-  ctx.translate(headX, -154)
+  ctx.translate(headX, -152)
   ctx.rotate(pose.head - angleCorrection)
   ctx.fillStyle = options.skin
   ctx.beginPath()
-  ctx.arc(-34, 1, 7, 0, Math.PI * 2)
-  ctx.arc(34, 1, 7, 0, Math.PI * 2)
+  ctx.arc(-27, 1, 5.5, 0, Math.PI * 2)
+  ctx.arc(27, 1, 5.5, 0, Math.PI * 2)
   ctx.fill()
   ctx.beginPath()
-  ctx.ellipse(0, 0, 34, 39, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, 28, 34, 0, 0, Math.PI * 2)
   ctx.fill()
   drawHair(ctx, options.hairStyle, options.hair)
 
   ctx.fillStyle = '#26342f'
   ctx.beginPath()
-  ctx.ellipse(-12, -2, 3, 4.5, 0, 0, Math.PI * 2)
-  ctx.ellipse(12, -2, 3, 4.5, 0, 0, Math.PI * 2)
+  ctx.ellipse(-9.5, -3, 2.4, 3.8, 0, 0, Math.PI * 2)
+  ctx.ellipse(9.5, -3, 2.4, 3.8, 0, 0, Math.PI * 2)
   ctx.fill()
+  ctx.strokeStyle = 'rgba(92, 57, 47, .42)'
+  ctx.lineWidth = 1.3
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.quadraticCurveTo(-1.5, 5, 2, 5.5)
+  ctx.stroke()
   ctx.strokeStyle = '#7b3f42'
-  ctx.lineWidth = 2.5
+  ctx.lineWidth = 2.1
   ctx.lineCap = 'round'
   ctx.beginPath()
-  ctx.arc(0, 11, 9.5, 0.15, Math.PI - 0.15)
+  ctx.arc(0, 11, 8, 0.15, Math.PI - 0.15)
   ctx.stroke()
   ctx.restore()
 
@@ -546,7 +1477,7 @@ export function renderAvatar(canvas: HTMLCanvasElement, options: AvatarOptions, 
   ctx.save()
   ctx.translate(width / 2, height * 0.53)
   ctx.scale(scale, scale)
-  drawAvatar(ctx, 0, 0, options, time, livePose)
+  drawJointAvatar(ctx, 0, 0, options, time, livePose)
   const robotSide = robotPose ? (options.robot === 'left' ? 'left' : 'right') : options.robot
   if (robotSide === 'left') drawRobot(ctx, -170, 112, time, robotPose)
   if (robotSide === 'right') drawRobot(ctx, 170, 112, time, robotPose)
