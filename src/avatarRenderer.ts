@@ -296,6 +296,7 @@ function articulatedLimb(
 }
 
 function drawHair(ctx: Ctx, style: AvatarOptions['hairStyle'], color: string) {
+  if (style === 'none') return
   ctx.save()
   ctx.fillStyle = color
   if (style === 'crop') {
@@ -342,7 +343,7 @@ function drawHair(ctx: Ctx, style: AvatarOptions['hairStyle'], color: string) {
     ctx.quadraticCurveTo(19, 11, 17, 1)
     ctx.closePath()
     ctx.fill()
-  } else {
+  } else if (style === 'spike') {
     ctx.beginPath()
     ctx.moveTo(-28, -2)
     ctx.quadraticCurveTo(-29, -15, -25, -27)
@@ -852,15 +853,6 @@ function drawTorso(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
       ctx.arc(15, -50, 3, 0, Math.PI * 2)
       ctx.fill()
     } else if (options.outfitStyle === 'tunic') {
-      const tunicHem = options.bottomStyle === 'skirt' ? -3 : 20
-      ctx.fillStyle = options.accent
-      ctx.beginPath()
-      ctx.moveTo(-geometry.hip, -22)
-      ctx.lineTo(-geometry.hip - 5, tunicHem)
-      ctx.quadraticCurveTo(0, tunicHem + 10, geometry.hip + 5, tunicHem)
-      ctx.lineTo(geometry.hip, -22)
-      ctx.closePath()
-      ctx.fill()
       ctx.fillStyle = options.trousers
       roundedRect(ctx, -geometry.waist, -29, geometry.waist * 2, 8, 4)
       ctx.fill()
@@ -870,8 +862,6 @@ function drawTorso(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
       ctx.moveTo(-9, top + 3)
       ctx.lineTo(0, top + 16)
       ctx.lineTo(9, top + 3)
-      ctx.moveTo(-geometry.hip + 2, tunicHem - 2)
-      ctx.quadraticCurveTo(0, tunicHem + 7, geometry.hip - 2, tunicHem - 2)
       ctx.stroke()
     }
 
@@ -906,7 +896,7 @@ function drawTorso(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
 
 }
 
-function drawRobotHead(ctx: Ctx, options: AvatarOptions) {
+function drawRobotHead(ctx: Ctx, options: AvatarOptions, liveFace?: HTMLCanvasElement | null) {
   const halfWidth = options.faceShape === 'round' ? 30 : options.faceShape === 'angular' ? 33 : 29
   const halfHeight = options.faceShape === 'round' ? 29 : options.faceShape === 'oval' ? 33 : 29
   ctx.fillStyle = options.skin
@@ -918,42 +908,52 @@ function drawRobotHead(ctx: Ctx, options: AvatarOptions) {
   ctx.fillStyle = options.hair
   roundedRect(ctx, -22, -17, 44, 27, options.faceShape === 'angular' ? 4 : 8)
   ctx.fill()
-  ctx.fillStyle = options.accent
-  ctx.strokeStyle = options.accent
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  if (options.eyeStyle === 'happy') {
-    ctx.arc(-9, -2, 5, Math.PI * 1.08, Math.PI * 1.92)
-    ctx.moveTo(14, -2)
-    ctx.arc(9, -2, 5, Math.PI * 1.08, Math.PI * 1.92)
-    ctx.stroke()
-  } else if (options.eyeStyle === 'sparkle') {
-    ctx.moveTo(-9, -10)
-    ctx.lineTo(-5, -4)
-    ctx.lineTo(-9, 2)
-    ctx.lineTo(-13, -4)
-    ctx.closePath()
-    ctx.arc(9, -4, 4, 0, Math.PI * 2)
-    ctx.fill()
-  } else if (options.eyeStyle === 'focused') {
-    roundedRect(ctx, -15, -7, 11, 6, 3)
-    ctx.fill()
-    roundedRect(ctx, 4, -7, 11, 6, 3)
-    ctx.fill()
+  if (liveFace) {
+    ctx.save()
+    roundedRect(ctx, -22, -17, 44, 27, options.faceShape === 'angular' ? 4 : 8)
+    ctx.clip()
+    ctx.drawImage(liveFace, 0, 38, liveFace.width, 110, -22, -17, 44, 27)
+    ctx.fillStyle = 'rgba(34, 77, 67, .12)'
+    ctx.fillRect(-22, -17, 44, 27)
+    ctx.restore()
   } else {
-    ctx.arc(-9, -4, 4, 0, Math.PI * 2)
-    ctx.arc(9, -4, 4, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.fillStyle = options.accent
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    if (options.eyeStyle === 'happy') {
+      ctx.arc(-9, -2, 5, Math.PI * 1.08, Math.PI * 1.92)
+      ctx.moveTo(14, -2)
+      ctx.arc(9, -2, 5, Math.PI * 1.08, Math.PI * 1.92)
+      ctx.stroke()
+    } else if (options.eyeStyle === 'sparkle') {
+      ctx.moveTo(-9, -10)
+      ctx.lineTo(-5, -4)
+      ctx.lineTo(-9, 2)
+      ctx.lineTo(-13, -4)
+      ctx.closePath()
+      ctx.arc(9, -4, 4, 0, Math.PI * 2)
+      ctx.fill()
+    } else if (options.eyeStyle === 'focused') {
+      roundedRect(ctx, -15, -7, 11, 6, 3)
+      ctx.fill()
+      roundedRect(ctx, 4, -7, 11, 6, 3)
+      ctx.fill()
+    } else {
+      ctx.arc(-9, -4, 4, 0, Math.PI * 2)
+      ctx.arc(9, -4, 4, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.beginPath()
+    if (options.mouthStyle === 'smile') ctx.arc(0, 12, 7, .15, Math.PI - .15)
+    else if (options.mouthStyle === 'open') ctx.ellipse(0, 13, 5, 7, 0, 0, Math.PI * 2)
+    else {
+      ctx.moveTo(-7, 14)
+      ctx.lineTo(7, 14)
+    }
+    if (options.mouthStyle === 'open') ctx.fill()
+    else ctx.stroke()
   }
-  ctx.beginPath()
-  if (options.mouthStyle === 'smile') ctx.arc(0, 12, 7, .15, Math.PI - .15)
-  else if (options.mouthStyle === 'open') ctx.ellipse(0, 13, 5, 7, 0, 0, Math.PI * 2)
-  else {
-    ctx.moveTo(-7, 14)
-    ctx.lineTo(7, 14)
-  }
-  if (options.mouthStyle === 'open') ctx.fill()
-  else ctx.stroke()
 
   ctx.fillStyle = options.hair
   if (options.hairStyle === 'crop') {
@@ -970,7 +970,7 @@ function drawRobotHead(ctx: Ctx, options: AvatarOptions) {
     ctx.fill()
     roundedRect(ctx, 29, -18, 8, 32, 4)
     ctx.fill()
-  } else {
+  } else if (options.hairStyle === 'spike') {
     ctx.beginPath()
     ctx.moveTo(-20, -28)
     ctx.lineTo(-14, -40)
@@ -1004,7 +1004,47 @@ function drawRobotHead(ctx: Ctx, options: AvatarOptions) {
   }
 }
 
-function drawHumanHead(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
+function traceHumanFace(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry) {
+  ctx.beginPath()
+  if (options.faceShape === 'angular') {
+    ctx.moveTo(-geometry.headRx, -10)
+    ctx.quadraticCurveTo(-geometry.headRx + 2, -geometry.headRy, 0, -geometry.headRy)
+    ctx.quadraticCurveTo(geometry.headRx - 2, -geometry.headRy, geometry.headRx, -10)
+    ctx.lineTo(geometry.headRx - 4, 18)
+    ctx.lineTo(0, geometry.headRy)
+    ctx.lineTo(-geometry.headRx + 4, 18)
+    ctx.closePath()
+  } else {
+    const roundScale = options.faceShape === 'round' ? 1.08 : 1
+    ctx.ellipse(0, 0, geometry.headRx * roundScale, geometry.headRy * (options.faceShape === 'round' ? .94 : 1), 0, 0, Math.PI * 2)
+  }
+}
+
+function drawHumanHeadAccessory(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry, eyeX: number, eyeY: number, eyeRx: number, eyeRy: number) {
+  if (options.accessory === 'glasses') {
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.ellipse(-eyeX, eyeY, eyeRx + 6, eyeRy + 4, 0, 0, Math.PI * 2)
+    ctx.ellipse(eyeX, eyeY, eyeRx + 6, eyeRy + 4, 0, 0, Math.PI * 2)
+    ctx.moveTo(-3, eyeY)
+    ctx.lineTo(3, eyeY)
+    ctx.stroke()
+  } else if (options.accessory === 'headphones') {
+    ctx.strokeStyle = options.accent
+    ctx.lineWidth = 4
+    ctx.beginPath()
+    ctx.arc(0, -8, geometry.headRx + 5, Math.PI, Math.PI * 2)
+    ctx.stroke()
+    ctx.fillStyle = options.accent
+    roundedRect(ctx, -geometry.headRx - 7, -8, 8, 21, 4)
+    ctx.fill()
+    roundedRect(ctx, geometry.headRx - 1, -8, 8, 21, 4)
+    ctx.fill()
+  }
+}
+
+function drawHumanHead(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometry, liveFace?: HTMLCanvasElement | null) {
   if (options.concept === 'alien') {
     ctx.fillStyle = options.skin
     ctx.beginPath()
@@ -1024,20 +1064,18 @@ function drawHumanHead(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometr
   }
 
   ctx.fillStyle = options.skin
-  ctx.beginPath()
-  if (options.faceShape === 'angular') {
-    ctx.moveTo(-geometry.headRx, -10)
-    ctx.quadraticCurveTo(-geometry.headRx + 2, -geometry.headRy, 0, -geometry.headRy)
-    ctx.quadraticCurveTo(geometry.headRx - 2, -geometry.headRy, geometry.headRx, -10)
-    ctx.lineTo(geometry.headRx - 4, 18)
-    ctx.lineTo(0, geometry.headRy)
-    ctx.lineTo(-geometry.headRx + 4, 18)
-    ctx.closePath()
-  } else {
-    const roundScale = options.faceShape === 'round' ? 1.08 : 1
-    ctx.ellipse(0, 0, geometry.headRx * roundScale, geometry.headRy * (options.faceShape === 'round' ? .94 : 1), 0, 0, Math.PI * 2)
-  }
+  traceHumanFace(ctx, options, geometry)
   ctx.fill()
+  if (liveFace) {
+    ctx.save()
+    traceHumanFace(ctx, options, geometry)
+    ctx.clip()
+    const roundScale = options.faceShape === 'round' ? 1.08 : 1
+    const faceWidth = geometry.headRx * roundScale * 2
+    const faceHeight = geometry.headRy * (options.faceShape === 'round' ? .94 : 1) * 2
+    ctx.drawImage(liveFace, -faceWidth * .5, -faceHeight * .5, faceWidth, faceHeight)
+    ctx.restore()
+  }
   ctx.save()
   const hairScale = options.concept === 'alien' ? .92 : 1
   ctx.scale((geometry.headRx / 28) * hairScale, (geometry.headRy / 34) * hairScale)
@@ -1057,6 +1095,18 @@ function drawHumanHead(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometr
   const eyeY = options.concept === 'alien' ? -4 : -3
   const eyeRx = options.concept === 'alien' ? 5 : 2.4
   const eyeRy = options.concept === 'alien' ? 8 : 3.8
+  if (liveFace) {
+    if (options.concept === 'athlete') {
+      ctx.strokeStyle = options.shirt
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(-24, -12)
+      ctx.quadraticCurveTo(0, -7, 24, -12)
+      ctx.stroke()
+    }
+    drawHumanHeadAccessory(ctx, options, geometry, eyeX, eyeY, eyeRx, eyeRy)
+    return
+  }
   ctx.fillStyle = '#26342f'
   ctx.strokeStyle = '#26342f'
   ctx.lineWidth = 2
@@ -1131,30 +1181,10 @@ function drawHumanHead(ctx: Ctx, options: AvatarOptions, geometry: AvatarGeometr
     ctx.fill()
   } else ctx.stroke()
 
-  if (options.accessory === 'glasses') {
-    ctx.strokeStyle = options.accent
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.ellipse(-eyeX, eyeY, eyeRx + 6, eyeRy + 4, 0, 0, Math.PI * 2)
-    ctx.ellipse(eyeX, eyeY, eyeRx + 6, eyeRy + 4, 0, 0, Math.PI * 2)
-    ctx.moveTo(-3, eyeY)
-    ctx.lineTo(3, eyeY)
-    ctx.stroke()
-  } else if (options.accessory === 'headphones') {
-    ctx.strokeStyle = options.accent
-    ctx.lineWidth = 4
-    ctx.beginPath()
-    ctx.arc(0, -8, geometry.headRx + 5, Math.PI, Math.PI * 2)
-    ctx.stroke()
-    ctx.fillStyle = options.accent
-    roundedRect(ctx, -geometry.headRx - 7, -8, 8, 21, 4)
-    ctx.fill()
-    roundedRect(ctx, geometry.headRx - 1, -8, 8, 21, 4)
-    ctx.fill()
-  }
+  drawHumanHeadAccessory(ctx, options, geometry, eyeX, eyeY, eyeRx, eyeRy)
 }
 
-function drawJointAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: number, livePose?: LivePose | null) {
+function drawJointAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: number, livePose?: LivePose | null, liveFace?: HTMLCanvasElement | null) {
   const scripted = motionPose(options.motion, t)
   const isLive = Boolean(livePose && livePose.confidence > 0.42)
   const pose = isLive && livePose ? {
@@ -1308,8 +1338,8 @@ function drawJointAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions,
   ctx.save()
   ctx.translate(headX, geometry.headY)
   ctx.rotate(pose.head - angleCorrection)
-  if (mechanical) drawRobotHead(ctx, options)
-  else drawHumanHead(ctx, options, geometry)
+  if (mechanical) drawRobotHead(ctx, options, liveFace)
+  else drawHumanHead(ctx, options, geometry, liveFace)
   ctx.restore()
 
   arms.filter((arm) => arm.front).sort((a, b) => b.depth - a.depth).forEach(paintArm)
@@ -1459,7 +1489,7 @@ function drawAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: n
   ctx.restore()
 }
 
-export function renderAvatar(canvas: HTMLCanvasElement, options: AvatarOptions, time = 0, livePose?: LivePose | null, robotPose?: RobotPose | null) {
+export function renderAvatar(canvas: HTMLCanvasElement, options: AvatarOptions, time = 0, livePose?: LivePose | null, robotPose?: RobotPose | null, liveFace?: HTMLCanvasElement | null) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
   const rect = canvas.getBoundingClientRect()
   const width = Math.max(320, rect.width)
@@ -1477,7 +1507,7 @@ export function renderAvatar(canvas: HTMLCanvasElement, options: AvatarOptions, 
   ctx.save()
   ctx.translate(width / 2, height * 0.53)
   ctx.scale(scale, scale)
-  drawJointAvatar(ctx, 0, 0, options, time, livePose)
+  drawJointAvatar(ctx, 0, 0, options, time, livePose, liveFace)
   const robotSide = robotPose ? (options.robot === 'left' ? 'left' : 'right') : options.robot
   if (robotSide === 'left') drawRobot(ctx, -170, 112, time, robotPose)
   if (robotSide === 'right') drawRobot(ctx, 170, 112, time, robotPose)

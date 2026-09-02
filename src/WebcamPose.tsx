@@ -7,10 +7,19 @@ type TrackerStatus = 'loading' | 'ready' | 'searching' | 'error'
 
 interface WebcamPoseProps {
   enabled: boolean
+  faceCaptureEnabled: boolean
   captureRequest: number
   onClose: () => void
   onPose: (pose: LivePose | null) => void
+  onFaceFrame: (frame: HTMLCanvasElement | null) => void
   onCapture: (photo: string) => void
+}
+
+interface FaceBox {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 const majorLandmarks = [7, 8, 11, 12, 13, 14, 15, 16, 19, 20, 23, 24, 25, 26, 27, 28, 31, 32]
@@ -82,6 +91,63 @@ function smoothPose(previous: LivePose | null, next: LivePose): LivePose {
   }
 }
 
+function getFaceBox(video: HTMLVideoElement, landmarks: NormalizedLandmark[]) {
+  const nose = landmarks[0]
+  const leftEar = landmarks[7]
+  const rightEar = landmarks[8]
+  const leftShoulder = landmarks[11]
+  const rightShoulder = landmarks[12]
+  if (!nose || !leftEar || !rightEar || !leftShoulder || !rightShoulder) return null
+
+  const videoWidth = video.videoWidth
+  const videoHeight = video.videoHeight
+  if (!videoWidth || !videoHeight) return null
+
+  const earWidth = Math.hypot(
+    (leftEar.x - rightEar.x) * videoWidth,
+    (leftEar.y - rightEar.y) * videoHeight,
+  )
+  const shoulderWidth = Math.hypot(
+    (leftShoulder.x - rightShoulder.x) * videoWidth,
+    (leftShoulder.y - rightShoulder.y) * videoHeight,
+  )
+  const width = clamp(Math.max(earWidth * 1.72, shoulderWidth * .42), videoWidth * .15, videoWidth * .4)
+  const height = width * 1.2
+  const earCenterX = (leftEar.x + rightEar.x) * .5 * videoWidth
+  const centerX = earCenterX * .72 + nose.x * videoWidth * .28
+  // Keep the crop biased toward the forehead so the neck does not fill the avatar face.
+  const centerY = nose.y * videoHeight - height * .16
+
+  return {
+    x: clamp(centerX - width * .5, 0, Math.max(0, videoWidth - width)),
+    y: clamp(centerY - height * .5, 0, Math.max(0, videoHeight - height)),
+    width,
+    height,
+  }
+}
+
+function smoothFaceBox(previous: FaceBox | null, next: FaceBox): FaceBox {
+  if (!previous) return next
+  return {
+    x: lerp(previous.x, next.x, .24),
+    y: lerp(previous.y, next.y, .24),
+    width: lerp(previous.width, next.width, .2),
+    height: lerp(previous.height, next.height, .2),
+  }
+}
+
+function drawFaceFrame(video: HTMLVideoElement, box: FaceBox, canvas: HTMLCanvasElement) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return false
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  ctx.save()
+  ctx.translate(canvas.width, 0)
+  ctx.scale(-1, 1)
+  ctx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, canvas.width, canvas.height)
+  ctx.restore()
+  return true
+}
+
 function toLivePose(landmarks: NormalizedLandmark[], baselineHip: number) {
   const leftShoulder = mirror(landmarks[11])
   const rightShoulder = mirror(landmarks[12])
@@ -134,9 +200,20 @@ function toLivePose(landmarks: NormalizedLandmark[], baselineHip: number) {
   }
 }
 
-export function WebcamPose({ enabled, captureRequest, onClose, onPose, onCapture }: WebcamPoseProps) {
+export function WebcamPose({ enabled, faceCaptureEnabled, captureRequest, onClose, onPose, onFaceFrame, onCapture }: WebcamPoseProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const faceCaptureEnabledRef = useRef(faceCaptureEnabled)
+  const onFaceFrameRef = useRef(onFaceFrame)
   const [status, setStatus] = useState<TrackerStatus>('loading')
+
+  useEffect(() => {
+    faceCaptureEnabledRef.current = faceCaptureEnabled
+    if (!faceCaptureEnabled) onFaceFrameRef.current(null)
+  }, [faceCaptureEnabled])
+
+  useEffect(() => {
+    onFaceFrameRef.current = onFaceFrame
+  }, [onFaceFrame])
 
   useEffect(() => {
     if (!enabled) return
@@ -147,8 +224,13 @@ export function WebcamPose({ enabled, captureRequest, onClose, onPose, onCapture
     let lastVideoTime = -1
     let nextDetectionAt = 0
     let hadPose = false
+    let hadFaceFrame = false
     let baselineHip: number | null = null
     let smoothedPose: LivePose | null = null
+    let smoothedFaceBox: FaceBox | null = null
+    const faceCanvas = document.createElement('canvas')
+    faceCanvas.width = 180
+    faceCanvas.height = 216
 
     const start = async () => {
       setStatus('loading')
@@ -206,6 +288,20 @@ export function WebcamPose({ enabled, captureRequest, onClose, onPose, onCapture
             const result = landmarker.detectForVideo(currentVideo, time)
             const landmarks = result.landmarks[0]
             if (landmarks) {
+              if (faceCaptureEnabledRef.current) {
+                const nextFaceBox = getFaceBox(currentVideo, landmarks)
+                if (nextFaceBox) {
+                  smoothedFaceBox = smoothFaceBox(smoothedFaceBox, nextFaceBox)
+                  if (drawFaceFrame(currentVideo, smoothedFaceBox, faceCanvas)) {
+                    onFaceFrameRef.current(faceCanvas)
+                    hadFaceFrame = true
+                  }
+                }
+              } else if (hadFaceFrame) {
+                hadFaceFrame = false
+                smoothedFaceBox = null
+                onFaceFrameRef.current(null)
+              }
               const hipY = (landmarks[23].y + landmarks[24].y) / 2
               if (baselineHip === null) baselineHip = hipY
               if (hipY > baselineHip) baselineHip = lerp(baselineHip, hipY, 0.025)
@@ -225,6 +321,11 @@ export function WebcamPose({ enabled, captureRequest, onClose, onPose, onCapture
               onPose(null)
               setStatus('searching')
             }
+            if (!landmarks && hadFaceFrame) {
+              hadFaceFrame = false
+              smoothedFaceBox = null
+              onFaceFrameRef.current(null)
+            }
           }
           frame = requestAnimationFrame(detect)
         }
@@ -241,6 +342,7 @@ export function WebcamPose({ enabled, captureRequest, onClose, onPose, onCapture
       stream?.getTracks().forEach((track) => track.stop())
       landmarker?.close()
       onPose(null)
+      onFaceFrameRef.current(null)
     }
   }, [enabled, onPose])
 

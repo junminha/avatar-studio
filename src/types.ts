@@ -1,6 +1,6 @@
 export type Scene = 'studio' | 'sunset' | 'day' | 'cyber'
 export type MotionName = 'idle' | 'wave' | 'dance' | 'jump' | 'cross'
-export type HairStyle = 'crop' | 'wave' | 'bob' | 'spike'
+export type HairStyle = 'none' | 'crop' | 'wave' | 'bob' | 'spike'
 export type RobotSide = 'none' | 'left' | 'right'
 export type AvatarConcept = 'classic' | 'woman' | 'robot' | 'athlete' | 'explorer' | 'alien'
 export type BodyBuild = 'slim' | 'balanced' | 'broad'

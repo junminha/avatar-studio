@@ -20,6 +20,7 @@ import {
   VideoCameraSlash,
   Trophy,
   Timer,
+  X,
 } from '@phosphor-icons/react'
 import { renderAvatar } from './avatarRenderer'
 import { calculateSyncScore, challengePoses, type ChallengePose } from './challengePoses'
@@ -27,6 +28,7 @@ import type { AccessoryStyle, AnalysisResult, AvatarConcept, AvatarOptions, Body
 
 const WebcamPose = lazy(() => import('./WebcamPose').then((module) => ({ default: module.WebcamPose })))
 const leaderboardKey = 'morph-pose-leaderboard'
+const challengeDurationSeconds = 15
 
 type StudioMode = 'customize' | 'challenge' | 'ranking'
 type ChallengePhase = 'idle' | 'waiting' | 'preparing' | 'running' | 'result'
@@ -97,6 +99,7 @@ const scenes: { id: Scene; label: string; colors: [string, string] }[] = [
 ]
 
 const hairStyles: { id: HairStyle; label: string }[] = [
+  { id: 'none', label: '없음' },
   { id: 'crop', label: '쇼트' },
   { id: 'wave', label: '웨이브' },
   { id: 'bob', label: '보브' },
@@ -198,6 +201,7 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const livePoseRef = useRef<LivePose | null>(null)
+  const liveFaceRef = useRef<HTMLCanvasElement | null>(null)
   const [options, setOptions] = useState<AvatarOptions>(initialOptions)
   const [photo, setPhoto] = useState<string | null>(null)
   const [fileName, setFileName] = useState('')
@@ -206,6 +210,8 @@ function App() {
   const [tab, setTab] = useState<CustomizeTab>('type')
   const [dragging, setDragging] = useState(false)
   const [webcamEnabled, setWebcamEnabled] = useState(false)
+  const [webcamFaceEnabled, setWebcamFaceEnabled] = useState(false)
+  const [webcamFaceReady, setWebcamFaceReady] = useState(false)
   const [studioMode, setStudioMode] = useState<StudioMode>('customize')
   const [currentChallenge, setCurrentChallenge] = useState<ChallengePose>(challengePoses[0])
   const currentChallengeRef = useRef<ChallengePose>(challengePoses[0])
@@ -214,14 +220,29 @@ function App() {
   const challengeDeadlineRef = useRef(0)
   const challengeScoreRef = useRef(0)
   const [prepareTimeLeft, setPrepareTimeLeft] = useState(3)
-  const [timeLeft, setTimeLeft] = useState(5)
+  const [timeLeft, setTimeLeft] = useState(challengeDurationSeconds)
   const [liveScore, setLiveScore] = useState(0)
   const [finalScore, setFinalScore] = useState(0)
   const [captureRequest, setCaptureRequest] = useState(0)
   const [resultPhoto, setResultPhoto] = useState('')
   const [playerName, setPlayerName] = useState('')
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(loadLeaderboard)
+  const [selectedRankingEntry, setSelectedRankingEntry] = useState<LeaderboardEntry | null>(null)
   const reduceMotion = useReducedMotion()
+
+  useEffect(() => {
+    if (!selectedRankingEntry) return
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedRankingEntry(null)
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [selectedRankingEntry])
 
   const beginPreparation = useCallback(() => {
     if (challengePhaseRef.current === 'preparing' || challengePhaseRef.current === 'running') return
@@ -230,7 +251,7 @@ function App() {
     challengeScoreRef.current = 0
     setChallengePhase('preparing')
     setPrepareTimeLeft(3)
-    setTimeLeft(5)
+    setTimeLeft(challengeDurationSeconds)
     setLiveScore(0)
   }, [])
 
@@ -247,6 +268,11 @@ function App() {
     setResultPhoto(capturedPhoto)
   }, [])
 
+  const handleFaceFrame = useCallback((frame: HTMLCanvasElement | null) => {
+    liveFaceRef.current = frame
+    setWebcamFaceReady(Boolean(frame))
+  }, [])
+
   useEffect(() => {
     if (challengePhase !== 'preparing' && challengePhase !== 'running') return
     const tick = () => {
@@ -255,10 +281,10 @@ function App() {
         setPrepareTimeLeft(remaining / 1000)
         if (remaining <= 0) {
           challengePhaseRef.current = 'running'
-          challengeDeadlineRef.current = performance.now() + 5000
+          challengeDeadlineRef.current = performance.now() + challengeDurationSeconds * 1000
           challengeScoreRef.current = 0
           setChallengePhase('running')
-          setTimeLeft(5)
+          setTimeLeft(challengeDurationSeconds)
           setLiveScore(0)
         }
         return
@@ -283,20 +309,20 @@ function App() {
     let frame = 0
     const draw = (time: number) => {
       const revealedPose = studioMode === 'challenge' && (challengePhase === 'running' || challengePhase === 'result') ? currentChallenge : null
-      if (canvasRef.current) renderAvatar(canvasRef.current, options, reduceMotion ? 0 : time, livePoseRef.current, revealedPose)
+      if (canvasRef.current) renderAvatar(canvasRef.current, options, reduceMotion ? 0 : time, livePoseRef.current, revealedPose, webcamFaceEnabled ? liveFaceRef.current : null)
       frame = requestAnimationFrame(draw)
     }
     frame = requestAnimationFrame(draw)
     const redraw = () => {
       const revealedPose = studioMode === 'challenge' && (challengePhase === 'running' || challengePhase === 'result') ? currentChallenge : null
-      if (canvasRef.current) renderAvatar(canvasRef.current, options, 0, livePoseRef.current, revealedPose)
+      if (canvasRef.current) renderAvatar(canvasRef.current, options, 0, livePoseRef.current, revealedPose, webcamFaceEnabled ? liveFaceRef.current : null)
     }
     window.addEventListener('resize', redraw)
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('resize', redraw)
     }
-  }, [options, reduceMotion, studioMode, currentChallenge, challengePhase])
+  }, [options, reduceMotion, studioMode, currentChallenge, challengePhase, webcamFaceEnabled])
 
   const update = <K extends keyof AvatarOptions>(key: K, value: AvatarOptions[K]) => {
     setOptions((current) => ({ ...current, [key]: value }))
@@ -367,6 +393,7 @@ function App() {
   }
 
   const selectMode = (mode: StudioMode) => {
+    setSelectedRankingEntry(null)
     setStudioMode(mode)
     if (mode !== 'challenge' && (challengePhaseRef.current === 'waiting' || challengePhaseRef.current === 'preparing' || challengePhaseRef.current === 'running')) {
       challengePhaseRef.current = 'idle'
@@ -385,7 +412,7 @@ function App() {
     setFinalScore(0)
     setLiveScore(0)
     setPrepareTimeLeft(3)
-    setTimeLeft(5)
+    setTimeLeft(challengeDurationSeconds)
     setWebcamEnabled(true)
     if (livePoseRef.current) {
       beginPreparation()
@@ -397,10 +424,24 @@ function App() {
 
   const stopWebcam = () => {
     setWebcamEnabled(false)
+    setWebcamFaceEnabled(false)
+    setWebcamFaceReady(false)
     livePoseRef.current = null
+    liveFaceRef.current = null
     if (challengePhaseRef.current === 'waiting' || challengePhaseRef.current === 'preparing' || challengePhaseRef.current === 'running') {
       challengePhaseRef.current = 'idle'
       setChallengePhase('idle')
+    }
+  }
+
+  const toggleWebcamFace = () => {
+    const next = !webcamFaceEnabled
+    setWebcamFaceEnabled(next)
+    if (next) {
+      setWebcamEnabled(true)
+    } else {
+      setWebcamFaceReady(false)
+      liveFaceRef.current = null
     }
   }
 
@@ -436,16 +477,19 @@ function App() {
     setStatus('empty')
     setFaceFound(false)
     setWebcamEnabled(false)
+    setWebcamFaceEnabled(false)
+    setWebcamFaceReady(false)
     setStudioMode('customize')
     challengePhaseRef.current = 'idle'
     setChallengePhase('idle')
     setPrepareTimeLeft(3)
-    setTimeLeft(5)
+    setTimeLeft(challengeDurationSeconds)
     setLiveScore(0)
     setFinalScore(0)
     setResultPhoto('')
     setPlayerName('')
     livePoseRef.current = null
+    liveFaceRef.current = null
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -461,13 +505,92 @@ function App() {
           <button type="button" className={studioMode === 'challenge' ? 'active' : ''} onClick={() => selectMode('challenge')}>문제 맞추기</button>
           <button type="button" className={studioMode === 'ranking' ? 'active' : ''} onClick={() => selectMode('ranking')}>순위</button>
         </nav>
-        <button className="icon-button" type="button" onClick={reset} title="처음부터 다시 만들기">
-          <ArrowCounterClockwise />
-          <span>초기화</span>
-        </button>
+        {studioMode !== 'ranking' ? (
+          <button className="icon-button" type="button" onClick={reset} title="처음부터 다시 만들기">
+            <ArrowCounterClockwise />
+            <span>초기화</span>
+          </button>
+        ) : <span aria-hidden="true" />}
       </header>
 
-      <main id="studio" className="workspace">
+      <main id="studio" className={`workspace ${studioMode === 'ranking' ? 'ranking-workspace' : ''}`}>
+        {studioMode === 'ranking' ? (
+          <section className="hall-of-fame" aria-labelledby="hall-title">
+            <header className="hall-header">
+              <div>
+                <p className="hall-eyebrow"><Trophy weight="fill" /> MORPH POSE ARCHIVE</p>
+                <h1 id="hall-title">명예의 전당</h1>
+                <p>가장 정확하게 로봇과 호흡을 맞춘 순간들입니다. 기록을 누르면 도전 사진을 크게 볼 수 있어요.</p>
+              </div>
+              <div className="hall-actions">
+                <span><b>{leaderboard.length}</b>개의 기록</span>
+                <button className="primary-game-button hall-start" type="button" onClick={startChallenge}><Play weight="fill" /> 새 기록 도전</button>
+              </div>
+            </header>
+
+            {leaderboard.length === 0 ? (
+              <div className="hall-empty">
+                <span><Trophy weight="duotone" /></span>
+                <strong>아직 전시된 기록이 없습니다</strong>
+                <p>문제 맞추기에서 첫 포즈 기록을 남겨보세요.</p>
+                <button className="primary-game-button hall-start" type="button" onClick={startChallenge}><Play weight="fill" /> 첫 기록 만들기</button>
+              </div>
+            ) : (
+              <div className="hall-content">
+                <div className="hall-gallery" aria-label="포즈 기록 갤러리">
+                  {leaderboard.map((entry, index) => (
+                    <motion.button
+                      className={`hall-card rank-${index + 1}`}
+                      type="button"
+                      key={entry.id}
+                      onClick={() => entry.photo && setSelectedRankingEntry(entry)}
+                      disabled={!entry.photo}
+                      initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: reduceMotion ? 0 : Math.min(index * .045, .3) }}
+                      aria-label={`${index + 1}위 ${entry.name}, ${entry.score}점 사진 크게 보기`}
+                    >
+                      <span className="hall-card-photo">
+                        {entry.photo ? <img src={entry.photo} alt="" /> : <Robot weight="duotone" />}
+                      </span>
+                      <span className="hall-card-shade" />
+                      <span className="hall-rank"><i>{index + 1}</i><small>RANK</small></span>
+                      <span className="hall-card-copy">
+                        <span><strong>{entry.name}</strong><small>{entry.poseLabel} · {new Date(entry.createdAt).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}</small></span>
+                        <b>{entry.score}<em>%</em></b>
+                      </span>
+                    </motion.button>
+                  ))}
+                </div>
+
+                <aside className="hall-list-panel" aria-label="전체 순위 목록">
+                  <div className="hall-list-head">
+                    <span>LEADERBOARD</span>
+                    <strong>전체 순위</strong>
+                  </div>
+                  <div className="hall-list">
+                    {leaderboard.map((entry, index) => (
+                      <button
+                        className="hall-list-row"
+                        type="button"
+                        key={entry.id}
+                        onClick={() => entry.photo && setSelectedRankingEntry(entry)}
+                        disabled={!entry.photo}
+                        aria-label={`${index + 1}위 ${entry.name}, ${entry.score}점 사진 크게 보기`}
+                      >
+                        <span className="hall-list-rank">{index + 1}</span>
+                        <span className="hall-list-photo">{entry.photo ? <img src={entry.photo} alt="" /> : <Robot />}</span>
+                        <span className="hall-list-person"><strong>{entry.name}</strong><small>{entry.poseLabel}</small></span>
+                        <b>{entry.score}<em>%</em></b>
+                      </button>
+                    ))}
+                  </div>
+                </aside>
+              </div>
+            )}
+          </section>
+        ) : (
+        <>
         <section className="intro-panel" aria-labelledby="main-title">
           <div>
             <p className="eyebrow">나를 닮은 작은 세계</p>
@@ -481,7 +604,7 @@ function App() {
                 <Timer weight="duotone" />
                 <span>CHALLENGE CLOCK</span>
               </div>
-              <strong>5<em>초</em></strong>
+              <strong>{challengeDurationSeconds}<em>초</em></strong>
               <p>한 포즈에 주어진 제한시간</p>
               <div className="challenge-left-status">
                 {challengePhase === 'preparing' ? `준비 ${Math.max(1, Math.ceil(prepareTimeLeft))}초` : challengePhase === 'running' ? `남은 시간 ${timeLeft.toFixed(1)}초` : challengePhase === 'result' ? '기록 저장 준비' : '도전 시작 후 카운트'}
@@ -579,7 +702,7 @@ function App() {
                 >
                   <span>READY</span>
                   <strong key={Math.ceil(prepareTimeLeft)}>{Math.max(1, Math.ceil(prepareTimeLeft))}</strong>
-                  <div className="countdown-limit"><Timer weight="duotone" /><b>제한시간 5초</b></div>
+                  <div className="countdown-limit"><Timer weight="duotone" /><b>제한시간 {challengeDurationSeconds}초</b></div>
                   <p>3초 후 목표 포즈가 공개됩니다</p>
                 </motion.div>
               )}
@@ -588,9 +711,11 @@ function App() {
               <Suspense fallback={<div className="webcam-preview loading"><div className="webcam-status"><VideoCamera /><span>추적 엔진 불러오는 중</span></div></div>}>
                 <WebcamPose
                   enabled={webcamEnabled}
+                  faceCaptureEnabled={webcamFaceEnabled}
                   captureRequest={captureRequest}
                   onClose={stopWebcam}
                   onPose={handleLivePose}
+                  onFaceFrame={handleFaceFrame}
                   onCapture={handleCapture}
                 />
               </Suspense>
@@ -671,6 +796,20 @@ function App() {
               </motion.div>
             ) : tab === 'face' ? (
               <motion.div key="face" className="tab-content" initial={reduceMotion ? false : { opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={reduceMotion ? {} : { opacity: 0, x: -10 }}>
+
+                <button
+                  className={`webcam-face-toggle ${webcamFaceEnabled ? 'active' : ''} ${webcamFaceReady ? 'ready' : ''}`}
+                  type="button"
+                  onClick={toggleWebcamFace}
+                  aria-pressed={webcamFaceEnabled}
+                >
+                  <span className="webcam-face-icon"><VideoCamera weight={webcamFaceEnabled ? 'fill' : 'duotone'} /></span>
+                  <span>
+                    <strong>{webcamFaceReady ? '내 얼굴 적용 중' : webcamFaceEnabled ? '얼굴 찾는 중' : '내 얼굴 입히기'}</strong>
+                    <small>{webcamFaceReady ? '머리카락과 액세서리는 그대로 유지돼요' : webcamFaceEnabled ? '카메라를 정면으로 바라봐 주세요' : '웹캠 얼굴을 아바타에 실시간으로 표시'}</small>
+                  </span>
+                  {webcamFaceReady ? <Check weight="bold" /> : null}
+                </button>
 
                 <fieldset>
                   <legend>{options.concept === 'robot' ? '헤드 프레임' : '헤어 스타일'}</legend>
@@ -760,7 +899,7 @@ function App() {
               </div>
               <div className="challenge-clock">
                 <Timer weight="duotone" />
-                <span>{challengePhase === 'preparing' ? `준비 ${Math.max(1, Math.ceil(prepareTimeLeft))}초` : challengePhase === 'running' ? `${timeLeft.toFixed(1)}초` : '제한 시간 5초'}</span>
+                <span>{challengePhase === 'preparing' ? `준비 ${Math.max(1, Math.ceil(prepareTimeLeft))}초` : challengePhase === 'running' ? `${timeLeft.toFixed(1)}초` : `제한 시간 ${challengeDurationSeconds}초`}</span>
               </div>
             </div>
 
@@ -841,7 +980,40 @@ function App() {
           </>
           )}
         </aside>
+        </>
+        )}
       </main>
+
+      <AnimatePresence>
+        {selectedRankingEntry?.photo && (
+          <motion.div
+            className="ranking-photo-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setSelectedRankingEntry(null)
+            }}
+          >
+            <motion.div
+              className="ranking-photo-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${selectedRankingEntry.name}의 도전 기록`}
+              initial={reduceMotion ? false : { opacity: 0, y: 20, scale: .97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={reduceMotion ? {} : { opacity: 0, y: 12, scale: .98 }}
+            >
+              <button className="ranking-photo-close" type="button" onClick={() => setSelectedRankingEntry(null)} aria-label="사진 닫기"><X weight="bold" /></button>
+              <img src={selectedRankingEntry.photo} alt={`${selectedRankingEntry.name}의 도전 사진 크게 보기`} />
+              <div className="ranking-photo-caption">
+                <span><small>{selectedRankingEntry.poseLabel}</small><strong>{selectedRankingEntry.name}</strong></span>
+                <b>{selectedRankingEntry.score}<em>%</em></b>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
