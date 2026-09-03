@@ -2,12 +2,6 @@
 
 웹캠으로 사용자의 전신 동작을 인식해 아바타를 움직이고, 로봇 친구의 포즈를 따라 하며 싱크로율을 겨루는 브라우저 기반 아바타 스튜디오입니다.
 
-## 바로 사용하기
-
-배포된 웹 앱: **https://junminha.github.io/avatar-studio/**
-
-웹캠 기능을 사용할 때는 브라우저의 카메라 권한을 허용해 주세요. Chrome 또는 Edge 최신 버전을 권장합니다.
-
 ## 주요 기능
 
 - MediaPipe Pose Landmarker 기반 실시간 전신 동작 인식
@@ -43,7 +37,7 @@ npm run dev
 터미널에 표시되는 주소로 접속합니다. 현재 기본 경로는 다음과 같습니다.
 
 ```text
-http://localhost:5173/avatar-studio/
+http://localhost:5173/
 ```
 
 최신 코드를 다시 받을 때는 다음 명령을 사용합니다.
@@ -89,18 +83,6 @@ localStorage.clear()
 location.reload()
 ```
 
-## 배포
-
-`main` 브랜치에 변경사항을 푸시하면 [GitHub Actions](.github/workflows/deploy-pages.yml)가 Vite 앱을 빌드하고 GitHub Pages에 자동 배포합니다.
-
-```bash
-git add .
-git commit -m "설명"
-git push origin main
-```
-
-배포 상태는 저장소의 [Actions](https://github.com/junminha/avatar-studio/actions) 탭에서 확인할 수 있습니다.
-
 ## 사용 기술
 
 - React 19
@@ -109,7 +91,6 @@ git push origin main
 - MediaPipe Tasks Vision
 - Motion
 - Canvas 2D
-- GitHub Actions 및 GitHub Pages
 
 ## 데이터 처리
 
