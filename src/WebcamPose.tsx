@@ -262,10 +262,11 @@ export function WebcamPose({ enabled, faceCaptureEnabled, captureRequest, onClos
         video.srcObject = stream
         await video.play()
 
-        const vision = await FilesetResolver.forVisionTasks('/wasm')
+        const assetBase = import.meta.env.BASE_URL
+        const vision = await FilesetResolver.forVisionTasks(`${assetBase}wasm`)
         const options = {
           baseOptions: {
-            modelAssetPath: '/models/pose_landmarker_lite.task',
+            modelAssetPath: `${assetBase}models/pose_landmarker_lite.task`,
             delegate: 'GPU' as const,
           },
           runningMode: 'VIDEO' as const,
