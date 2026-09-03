@@ -2,6 +2,9 @@ import type { AvatarOptions, LivePose, RobotPose } from './types'
 
 type Ctx = CanvasRenderingContext2D
 
+const FLOOR_HORIZON_RATIO = 0.72
+const GROUND_LINE_RATIO = 0.8
+
 function roundedRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {
   const radius = Math.min(r, w / 2, h / 2)
   ctx.beginPath()
@@ -42,11 +45,30 @@ function drawBackground(ctx: Ctx, width: number, height: number, scene: AvatarOp
   }
   ctx.restore()
 
-  const floor = ctx.createLinearGradient(0, height * 0.72, 0, height)
+  const floorHorizon = height * FLOOR_HORIZON_RATIO
+  const floor = ctx.createLinearGradient(0, floorHorizon, 0, height)
   floor.addColorStop(0, scene === 'cyber' ? 'rgba(7,17,30,.5)' : 'rgba(75,95,86,.12)')
   floor.addColorStop(1, scene === 'cyber' ? '#0b1523' : 'rgba(240,242,224,.76)')
   ctx.fillStyle = floor
-  ctx.fillRect(0, height * 0.72, width, height * 0.28)
+  ctx.fillRect(0, floorHorizon, width, height - floorHorizon)
+
+  ctx.save()
+  ctx.strokeStyle = scene === 'cyber' ? 'rgba(128,224,206,.16)' : 'rgba(45,69,60,.09)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(0, floorHorizon + .5)
+  ctx.lineTo(width, floorHorizon + .5)
+  ctx.stroke()
+  if (scene !== 'cyber') {
+    for (const ratio of [0.82, 0.91]) {
+      ctx.globalAlpha = ratio === 0.82 ? .7 : .42
+      ctx.beginPath()
+      ctx.moveTo(0, height * ratio)
+      ctx.lineTo(width, height * ratio)
+      ctx.stroke()
+    }
+  }
+  ctx.restore()
 
   if (scene === 'cyber') {
     ctx.save()
@@ -54,7 +76,7 @@ function drawBackground(ctx: Ctx, width: number, height: number, scene: AvatarOp
     ctx.lineWidth = 1
     for (let x = -width; x < width * 2; x += 42) {
       ctx.beginPath()
-      ctx.moveTo(width / 2, height * 0.72)
+      ctx.moveTo(width / 2, floorHorizon)
       ctx.lineTo(x, height)
       ctx.stroke()
     }
@@ -79,8 +101,24 @@ function drawRobot(ctx: Ctx, x: number, y: number, t: number, pose?: RobotPose |
   const rightUpperLeg = pose?.rightUpperLeg ?? -0.04
   const rightLowerLeg = pose?.rightLowerLeg ?? -0.04
   const bodyLean = pose?.bodyLean ?? 0
+  const robotGroundY = 104
+  const rootY = groundedRootShift({
+    legL: leftUpperLeg,
+    lowerLegL: leftLowerLeg,
+    legR: rightUpperLeg,
+    lowerLegR: rightLowerLeg,
+  }, 22, 23, bodyLean)
   ctx.save()
-  ctx.translate(x, y + bob)
+  ctx.translate(x, y + bob + rootY)
+
+  ctx.save()
+  ctx.globalAlpha = .15
+  ctx.fillStyle = '#17352b'
+  ctx.beginPath()
+  ctx.ellipse(0, robotGroundY - rootY, 29, 6.5, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+
   ctx.rotate(bodyLean)
 
   const leftFoot = articulatedLimb(ctx, -13, 55, 22, 23, 8, leftUpperLeg - bodyLean, leftLowerLeg - bodyLean, '#9db5ac')
@@ -209,6 +247,53 @@ function motionPose(motion: AvatarOptions['motion'], t: number) {
       lowerLegR: 0.36,
     }
   }
+  if (motion === 'sit') {
+    return {
+      ...base,
+      bob: 0,
+      body: 0,
+      head: 0,
+      armL: -0.18,
+      forearmL: -0.78,
+      handL: 0.18,
+      armFrontL: 0.86,
+      armDepthL: -0.07,
+      armR: 0.18,
+      forearmR: 0.78,
+      handR: Math.PI - 0.18,
+      armFrontR: 0.86,
+      armDepthR: -0.06,
+      legL: 1.05,
+      lowerLegL: -0.36,
+      legR: -1.05,
+      lowerLegR: 0.36,
+    }
+  }
+  if (motion === 'run') {
+    const stride = Math.sin(beat * 2.2)
+    const leftLift = Math.max(0, -stride)
+    const rightLift = Math.max(0, stride)
+    return {
+      ...base,
+      bob: -Math.abs(Math.sin(beat * 2.2)) * 6,
+      body: stride * .045,
+      head: -stride * .035,
+      armL: stride * .66,
+      forearmL: stride * .42,
+      handL: Math.PI / 2 + stride * .3,
+      armFrontL: stride < 0 ? .88 : .18,
+      armDepthL: stride < 0 ? -.1 : .06,
+      armR: stride * .66,
+      forearmR: stride * .42,
+      handR: Math.PI / 2 + stride * .3,
+      armFrontR: stride > 0 ? .88 : .18,
+      armDepthR: stride > 0 ? -.1 : .06,
+      legL: stride * .68,
+      lowerLegL: -stride * .14 - leftLift * .82,
+      legR: -stride * .68,
+      lowerLegR: stride * .14 + rightLift * .82,
+    }
+  }
   if (motion === 'cross') {
     return {
       ...base,
@@ -227,6 +312,22 @@ function motionPose(motion: AvatarOptions['motion'], t: number) {
     }
   }
   return base
+}
+
+function groundedRootShift(
+  pose: { legL: number; lowerLegL: number; legR: number; lowerLegR: number },
+  upperLeg: number,
+  lowerLeg: number,
+  angleCorrection: number,
+) {
+  const footEndY = (upperAngle: number, lowerAngle: number) => (
+    Math.cos(upperAngle - angleCorrection) * upperLeg
+    + Math.cos(lowerAngle - angleCorrection) * lowerLeg
+  )
+  const leftFootY = footEndY(pose.legL, pose.lowerLegL)
+  const rightFootY = footEndY(pose.legR, pose.lowerLegR)
+  const supportFootY = Math.max(leftFootY, rightFootY)
+  return Math.min(105, Math.max(0, upperLeg + lowerLeg - supportFootY))
 }
 
 function limb(ctx: Ctx, x: number, y: number, length: number, width: number, angle: number, color: string) {
@@ -1231,18 +1332,51 @@ function drawJointAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions,
   const legColor = options.bottomStyle === 'pants' || mechanical ? options.trousers : options.skin
   const limbOutline = 'transparent'
   const groundY = geometry.upperLeg + geometry.lowerLeg + 14
+  const plantedShift = groundedRootShift(pose, geometry.upperLeg, geometry.lowerLeg, angleCorrection)
+  const airborneShift = isLive ? Math.min(0, pose.bob) : pose.bob
+  const rootY = plantedShift + airborneShift
 
   ctx.save()
-  ctx.translate(x, y + pose.bob)
-  ctx.rotate(pose.body)
+  ctx.translate(x, y + rootY)
 
   ctx.save()
-  ctx.globalAlpha = .16
+  const airborne = Math.max(0, -airborneShift)
+  ctx.globalAlpha = Math.max(.07, .15 - airborne * .002)
   ctx.fillStyle = '#17352b'
   ctx.beginPath()
-  ctx.ellipse(0, groundY - pose.bob, (options.concept === 'explorer' ? 67 : 58) * buildScale, 11, 0, 0, Math.PI * 2)
+  ctx.ellipse(
+    0,
+    groundY - rootY + 2,
+    ((options.concept === 'explorer' ? 63 : 55) + airborne * .14) * buildScale,
+    9 + airborne * .035,
+    0,
+    0,
+    Math.PI * 2,
+  )
   ctx.fill()
   ctx.restore()
+
+  const contactFootX = (hipX: number, upperAngle: number, lowerAngle: number) => {
+    const localX = hipX
+      - Math.sin(upperAngle - angleCorrection) * geometry.upperLeg
+      - Math.sin(lowerAngle - angleCorrection) * geometry.lowerLeg
+    const localY = Math.cos(upperAngle - angleCorrection) * geometry.upperLeg
+      + Math.cos(lowerAngle - angleCorrection) * geometry.lowerLeg
+    return Math.cos(pose.body) * localX - Math.sin(pose.body) * localY
+  }
+  const contactAlpha = Math.max(0, 1 - airborne / 28)
+  if (contactAlpha > 0) {
+    ctx.save()
+    ctx.globalAlpha = .2 * contactAlpha
+    ctx.fillStyle = '#142d26'
+    ctx.beginPath()
+    ctx.ellipse(contactFootX(-geometry.hipX, pose.legL, pose.lowerLegL), groundY - rootY - 3, 17, 4, 0, 0, Math.PI * 2)
+    ctx.ellipse(contactFootX(geometry.hipX, pose.legR, pose.lowerLegR), groundY - rootY - 3, 17, 4, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+
+  ctx.rotate(pose.body)
 
   const leftFoot = articulatedLimb(ctx, -geometry.hipX, 0, geometry.upperLeg, geometry.lowerLeg, geometry.thighWidth, pose.legL - angleCorrection, pose.lowerLegL - angleCorrection, legColor, geometry.calfWidth, limbOutline)
   const rightFoot = articulatedLimb(ctx, geometry.hipX, 0, geometry.upperLeg, geometry.lowerLeg, geometry.thighWidth, pose.legR - angleCorrection, pose.lowerLegR - angleCorrection, legColor, geometry.calfWidth, limbOutline)
@@ -1374,15 +1508,18 @@ function drawAvatar(ctx: Ctx, x: number, y: number, options: AvatarOptions, t: n
     footR: livePose.rightFoot,
   } : scripted
   const angleCorrection = isLive ? pose.body : 0
+  const plantedShift = groundedRootShift(pose, 69, 67, angleCorrection)
+  const airborneShift = isLive ? Math.min(0, pose.bob) : pose.bob
+  const rootY = plantedShift + airborneShift
   ctx.save()
-  ctx.translate(x, y + pose.bob)
+  ctx.translate(x, y + rootY)
   ctx.rotate(pose.body)
 
   ctx.save()
   ctx.globalAlpha = 0.16
   ctx.fillStyle = '#17352b'
   ctx.beginPath()
-  ctx.ellipse(0, 151 - pose.bob, 59, 11, 0, 0, Math.PI * 2)
+  ctx.ellipse(0, 151 - rootY, 59, 11, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 
@@ -1504,12 +1641,18 @@ export function renderAvatar(canvas: HTMLCanvasElement, options: AvatarOptions, 
   ctx.clearRect(0, 0, width, height)
   drawBackground(ctx, width, height, options.scene, time)
   const scale = Math.min(width / 520, height / 520)
+  const geometry = avatarGeometry[options.concept]
+  const avatarGroundY = geometry.upperLeg + geometry.lowerLeg + 14
+  const groundLine = height * GROUND_LINE_RATIO
+  const avatarOriginY = groundLine - avatarGroundY * scale
+  const robotGroundY = 104
+  const robotOriginY = avatarGroundY - robotGroundY
   ctx.save()
-  ctx.translate(width / 2, height * 0.53)
+  ctx.translate(width / 2, avatarOriginY)
   ctx.scale(scale, scale)
   drawJointAvatar(ctx, 0, 0, options, time, livePose, liveFace)
   const robotSide = robotPose ? (options.robot === 'left' ? 'left' : 'right') : options.robot
-  if (robotSide === 'left') drawRobot(ctx, -170, 112, time, robotPose)
-  if (robotSide === 'right') drawRobot(ctx, 170, 112, time, robotPose)
+  if (robotSide === 'left') drawRobot(ctx, -170, robotOriginY, time, robotPose)
+  if (robotSide === 'right') drawRobot(ctx, 170, robotOriginY, time, robotPose)
   ctx.restore()
 }

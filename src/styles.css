@@ -301,7 +301,7 @@ h1 {
 .stage-head span { color: #76837e; font-family: "Consolas", monospace; font-size: 9px; letter-spacing: .13em; }
 .stage-head strong { font-size: 12px; }
 .stage-actions { display: flex; align-items: center; gap: 7px; }
-.webcam-action {
+.webcam-action, .capture-action {
   min-height: 38px;
   display: inline-flex;
   align-items: center;
@@ -315,9 +315,10 @@ h1 {
   font-size: 11px;
   font-weight: 800;
 }
-.webcam-action:hover { border-color: var(--accent); color: var(--accent); }
+.webcam-action:hover, .capture-action:hover { border-color: var(--accent); color: var(--accent); }
 .webcam-action.active { border-color: var(--accent); color: #f6fffb; background: var(--accent); }
-.webcam-action svg { width: 17px; height: 17px; }
+.capture-action.saved { border-color: var(--accent); color: var(--accent-strong); background: #e2f0ea; }
+.webcam-action svg, .capture-action svg { width: 17px; height: 17px; }
 .round-action {
   width: 38px;
   height: 38px;
@@ -958,8 +959,8 @@ legend { margin-bottom: 10px; color: #52605b; font-size: 11px; font-weight: 800;
   .stage-panel { height: auto; min-height: 0; grid-template-rows: auto minmax(440px, 67dvh) auto; padding: 9px; }
   .stage-head > div:first-child { gap: 7px; }
   .stage-head > div:first-child span { display: none; }
-  .webcam-action { width: 38px; padding: 0; justify-content: center; }
-  .webcam-action span { display: none; }
+  .webcam-action, .capture-action { width: 38px; padding: 0; justify-content: center; }
+  .webcam-action span, .capture-action span { display: none; }
   .webcam-preview { top: 12px; right: 12px; width: 132px; }
   .scene-strip { overflow-x: auto; grid-template-columns: repeat(4, minmax(84px, 1fr)); }
   .scene-strip button { flex-direction: column; gap: 5px; }
@@ -1043,8 +1044,9 @@ legend { margin-bottom: 10px; color: #52605b; font-size: 11px; font-weight: 800;
   .analysis-line.done { color: #73caa9; }
   .stage-panel, .control-panel { background: rgba(31, 44, 39, .95); border-color: rgba(156, 184, 173, .22); }
   .stage-panel { box-shadow: 0 24px 70px rgba(0, 0, 0, .28), inset 0 0 0 1px rgba(167, 196, 184, .13); }
-  .round-action, .webcam-action, .webcam-face-toggle, .concept-grid button, .choice-grid button, .style-grid button, .segmented button, .motion-list > button { color: #dce8e3; background: #26362f; border-color: #465b52; }
+  .round-action, .webcam-action, .capture-action, .webcam-face-toggle, .concept-grid button, .choice-grid button, .style-grid button, .segmented button, .motion-list > button { color: #dce8e3; background: #26362f; border-color: #465b52; }
   .webcam-action.active { color: #effbf6; background: var(--accent); border-color: var(--accent); }
+  .capture-action.saved { color: #a3e2ca; background: #29483c; border-color: var(--accent); }
   .webcam-face-toggle.active { color: #effbf6; background: #29483c; border-color: var(--accent); }
   .webcam-face-icon { color: #73caa9; background: #31443c; }
   .webcam-face-toggle small { color: #a2b2ab; }

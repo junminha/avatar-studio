@@ -148,12 +148,19 @@ function drawFaceFrame(video: HTMLVideoElement, box: FaceBox, canvas: HTMLCanvas
   return true
 }
 
-function toLivePose(landmarks: NormalizedLandmark[], baselineHip: number) {
+function toLivePose(landmarks: NormalizedLandmark[], baselineHip: number, baselineFootY: number) {
   const leftShoulder = mirror(landmarks[11])
   const rightShoulder = mirror(landmarks[12])
   const nose = mirror(landmarks[0])
   const shoulderMidX = (leftShoulder.x + rightShoulder.x) / 2
   const hipY = (landmarks[23].y + landmarks[24].y) / 2
+  const supportFootY = Math.max(landmarks[27].y, landmarks[28].y)
+  const hipRise = baselineHip - hipY
+  const footRise = baselineFootY - supportFootY
+  const feetVisible = Math.min(landmarks[27].visibility ?? 0, landmarks[28].visibility ?? 0) > .55
+  // A hip-only offset is commonly caused by crouching, leaning, or camera framing.
+  // Release the avatar from the floor only when both the hips and supporting foot rise.
+  const confirmedJump = feetVisible && hipRise > .035 && footRise > .035
   const torsoDepth = (landmarks[11].z + landmarks[12].z + landmarks[23].z + landmarks[24].z) / 4
   const shoulderMinX = Math.min(leftShoulder.x, rightShoulder.x)
   const shoulderMaxX = Math.max(leftShoulder.x, rightShoulder.x)
@@ -177,7 +184,7 @@ function toLivePose(landmarks: NormalizedLandmark[], baselineHip: number) {
     bodyLean: clamp(Math.atan2(rightShoulder.y - leftShoulder.y, rightShoulder.x - leftShoulder.x), -0.3, 0.3),
     headTilt: clamp(angleFromRight(landmarks[7], landmarks[8]), -0.42, 0.42),
     neckLean: clamp((nose.x - shoulderMidX) * 1.8, -0.34, 0.34),
-    hipLift: clamp((baselineHip - hipY) * 3.2, 0, 0.25),
+    hipLift: confirmedJump ? clamp(Math.min(hipRise, footRise) * 3.6, 0, .25) : 0,
     leftUpperArm: angleFromDown(landmarks[11], landmarks[13]),
     leftForearm: angleFromDown(landmarks[13], landmarks[15]),
     leftHand: palmDirection(landmarks[15], landmarks[19], landmarks[17]),
@@ -226,6 +233,8 @@ export function WebcamPose({ enabled, faceCaptureEnabled, captureRequest, onClos
     let hadPose = false
     let hadFaceFrame = false
     let baselineHip: number | null = null
+    let baselineFootY: number | null = null
+    let baselineSamples = 0
     let smoothedPose: LivePose | null = null
     let smoothedFaceBox: FaceBox | null = null
     const faceCanvas = document.createElement('canvas')
@@ -303,10 +312,18 @@ export function WebcamPose({ enabled, faceCaptureEnabled, captureRequest, onClos
                 onFaceFrameRef.current(null)
               }
               const hipY = (landmarks[23].y + landmarks[24].y) / 2
-              if (baselineHip === null) baselineHip = hipY
-              if (hipY > baselineHip) baselineHip = lerp(baselineHip, hipY, 0.025)
-              else baselineHip = lerp(baselineHip, hipY, 0.002)
-              const next = toLivePose(landmarks, baselineHip)
+              const supportFootY = Math.max(landmarks[27].y, landmarks[28].y)
+              if (baselineHip === null || baselineFootY === null) {
+                baselineHip = hipY
+                baselineFootY = supportFootY
+                baselineSamples = 1
+              } else if (baselineSamples < 18) {
+                // Calibrate briefly, then lock the standing height so a held sit does not drift upward.
+                if (Math.abs(hipY - baselineHip) < .08) baselineHip = lerp(baselineHip, hipY, .12)
+                if (Math.abs(supportFootY - baselineFootY) < .08) baselineFootY = lerp(baselineFootY, supportFootY, .12)
+                baselineSamples += 1
+              }
+              const next = toLivePose(landmarks, baselineHip, baselineFootY)
               if (next.confidence > 0.42) {
                 smoothedPose = smoothPose(smoothedPose, next)
                 onPose(smoothedPose)

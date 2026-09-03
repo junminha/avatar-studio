@@ -3,6 +3,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   ArrowCounterClockwise,
   ArrowDown,
+  Armchair,
+  Camera,
   Check,
   DownloadSimple,
   FloppyDisk,
@@ -111,6 +113,8 @@ const motions: { id: MotionName; label: string; detail: string }[] = [
   { id: 'wave', label: '인사', detail: '손 흔들어 인사하기' },
   { id: 'dance', label: '춤', detail: '리듬에 맞춰 움직이기' },
   { id: 'jump', label: '점프', detail: '가볍게 뛰어오르기' },
+  { id: 'sit', label: '앉기', detail: '편안하게 앉아 쉬기' },
+  { id: 'run', label: '달리기', detail: '팔과 다리를 힘차게 움직이기' },
   { id: 'cross', label: '팔짱', detail: '두 팔을 몸 앞에서 교차하기' },
 ]
 
@@ -202,6 +206,7 @@ function App() {
   const inputRef = useRef<HTMLInputElement>(null)
   const livePoseRef = useRef<LivePose | null>(null)
   const liveFaceRef = useRef<HTMLCanvasElement | null>(null)
+  const captureNoticeTimerRef = useRef<number | null>(null)
   const [options, setOptions] = useState<AvatarOptions>(initialOptions)
   const [photo, setPhoto] = useState<string | null>(null)
   const [fileName, setFileName] = useState('')
@@ -212,6 +217,7 @@ function App() {
   const [webcamEnabled, setWebcamEnabled] = useState(false)
   const [webcamFaceEnabled, setWebcamFaceEnabled] = useState(false)
   const [webcamFaceReady, setWebcamFaceReady] = useState(false)
+  const [captureSaved, setCaptureSaved] = useState(false)
   const [studioMode, setStudioMode] = useState<StudioMode>('customize')
   const [currentChallenge, setCurrentChallenge] = useState<ChallengePose>(challengePoses[0])
   const currentChallengeRef = useRef<ChallengePose>(challengePoses[0])
@@ -243,6 +249,10 @@ function App() {
       window.removeEventListener('keydown', closeOnEscape)
     }
   }, [selectedRankingEntry])
+
+  useEffect(() => () => {
+    if (captureNoticeTimerRef.current !== null) window.clearTimeout(captureNoticeTimerRef.current)
+  }, [])
 
   const beginPreparation = useCallback(() => {
     if (challengePhaseRef.current === 'preparing' || challengePhaseRef.current === 'running') return
@@ -386,10 +396,19 @@ function App() {
   const download = () => {
     const canvas = canvasRef.current
     if (!canvas) return
+    const now = new Date()
+    const twoDigits = (value: number) => String(value).padStart(2, '0')
+    const timestamp = `${now.getFullYear()}${twoDigits(now.getMonth() + 1)}${twoDigits(now.getDate())}-${twoDigits(now.getHours())}${twoDigits(now.getMinutes())}${twoDigits(now.getSeconds())}`
     const link = document.createElement('a')
-    link.download = 'morph-avatar.png'
+    link.download = `morph-avatar-${timestamp}.png`
     link.href = canvas.toDataURL('image/png')
     link.click()
+    setCaptureSaved(true)
+    if (captureNoticeTimerRef.current !== null) window.clearTimeout(captureNoticeTimerRef.current)
+    captureNoticeTimerRef.current = window.setTimeout(() => {
+      setCaptureSaved(false)
+      captureNoticeTimerRef.current = null
+    }, 1600)
   }
 
   const selectMode = (mode: StudioMode) => {
@@ -675,6 +694,10 @@ function App() {
               </strong>
             </div>
             <div className="stage-actions">
+              <button className={`capture-action ${captureSaved ? 'saved' : ''}`} type="button" onClick={download}>
+                {captureSaved ? <Check weight="bold" /> : <Camera weight="duotone" />}
+                <span>{captureSaved ? '저장됨' : '화면 캡처'}</span>
+              </button>
               <button
                 className={`webcam-action ${webcamEnabled ? 'active' : ''}`}
                 type="button"
@@ -846,10 +869,10 @@ function App() {
                 {webcamEnabled && (
                   <p className="live-hint"><VideoCamera weight="fill" /> 지금은 웹캠 동작이 우선 적용됩니다</p>
                 )}
-                {motions.map((item, index) => (
+                {motions.map((item) => (
                   <button key={item.id} type="button" className={options.motion === item.id ? 'active' : ''} onClick={() => update('motion', item.id)}>
                     <span className="motion-icon">
-                      {index === 0 ? <Sparkle /> : index === 1 ? <HandWaving /> : <PersonSimpleRun />}
+                      {item.id === 'idle' ? <Sparkle /> : item.id === 'wave' ? <HandWaving /> : item.id === 'sit' ? <Armchair /> : <PersonSimpleRun />}
                     </span>
                     <span><strong>{item.label}</strong><small>{item.detail}</small></span>
                     {options.motion === item.id && <Check weight="bold" />}
