@@ -35,6 +35,7 @@ const challengeDurationSeconds = 15
 type StudioMode = 'customize' | 'challenge' | 'ranking'
 type ChallengePhase = 'idle' | 'waiting' | 'preparing' | 'running' | 'result'
 type CustomizeTab = 'type' | 'face' | 'outfit' | 'move'
+type RankingPhotoSource = 'webcam' | 'avatar'
 type Choice<T extends string> = { id: T; label: string }
 
 function loadLeaderboard() {
@@ -44,6 +45,20 @@ function loadLeaderboard() {
   } catch {
     return []
   }
+}
+
+function captureAvatarForRanking(source: HTMLCanvasElement | null) {
+  if (!source || source.width === 0 || source.height === 0) return ''
+  const maxWidth = 360
+  const maxHeight = 450
+  const scale = Math.min(maxWidth / source.width, maxHeight / source.height, 1)
+  const snapshot = document.createElement('canvas')
+  snapshot.width = Math.max(1, Math.round(source.width * scale))
+  snapshot.height = Math.max(1, Math.round(source.height * scale))
+  const ctx = snapshot.getContext('2d')
+  if (!ctx) return ''
+  ctx.drawImage(source, 0, 0, snapshot.width, snapshot.height)
+  return snapshot.toDataURL('image/jpeg', .8)
 }
 
 const initialOptions: AvatarOptions = {
@@ -230,7 +245,9 @@ function App() {
   const [liveScore, setLiveScore] = useState(0)
   const [finalScore, setFinalScore] = useState(0)
   const [captureRequest, setCaptureRequest] = useState(0)
-  const [resultPhoto, setResultPhoto] = useState('')
+  const [resultWebcamPhoto, setResultWebcamPhoto] = useState('')
+  const [resultAvatarPhoto, setResultAvatarPhoto] = useState('')
+  const [rankingPhotoSource, setRankingPhotoSource] = useState<RankingPhotoSource>('webcam')
   const [playerName, setPlayerName] = useState('')
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(loadLeaderboard)
   const [selectedRankingEntry, setSelectedRankingEntry] = useState<LeaderboardEntry | null>(null)
@@ -275,7 +292,8 @@ function App() {
   }, [beginPreparation])
 
   const handleCapture = useCallback((capturedPhoto: string) => {
-    setResultPhoto(capturedPhoto)
+    setResultWebcamPhoto(capturedPhoto)
+    if (!capturedPhoto) setRankingPhotoSource('avatar')
   }, [])
 
   const handleFaceFrame = useCallback((frame: HTMLCanvasElement | null) => {
@@ -303,10 +321,12 @@ function App() {
       setLiveScore(challengeScoreRef.current)
       if (remaining <= 0) {
         const score = challengeScoreRef.current
+        const avatarPhoto = captureAvatarForRanking(canvasRef.current)
         challengePhaseRef.current = 'result'
         setChallengePhase('result')
         setFinalScore(score)
         setLiveScore(score)
+        setResultAvatarPhoto(avatarPhoto)
         setCaptureRequest((current) => current + 1)
       }
     }
@@ -426,7 +446,9 @@ function App() {
     currentChallengeRef.current = nextPose
     setCurrentChallenge(nextPose)
     setStudioMode('challenge')
-    setResultPhoto('')
+    setResultWebcamPhoto('')
+    setResultAvatarPhoto('')
+    setRankingPhotoSource('webcam')
     setPlayerName('')
     setFinalScore(0)
     setLiveScore(0)
@@ -466,12 +488,13 @@ function App() {
 
   const saveResult = () => {
     const name = playerName.trim()
-    if (!name || challengePhase !== 'result') return
+    const selectedPhoto = rankingPhotoSource === 'webcam' ? resultWebcamPhoto : resultAvatarPhoto
+    if (!name || !selectedPhoto || challengePhase !== 'result') return
     const entry: LeaderboardEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: name.slice(0, 16),
       score: finalScore,
-      photo: resultPhoto,
+      photo: selectedPhoto,
       poseLabel: currentChallenge.label,
       createdAt: Date.now(),
     }
@@ -505,7 +528,9 @@ function App() {
     setTimeLeft(challengeDurationSeconds)
     setLiveScore(0)
     setFinalScore(0)
-    setResultPhoto('')
+    setResultWebcamPhoto('')
+    setResultAvatarPhoto('')
+    setRankingPhotoSource('webcam')
     setPlayerName('')
     livePoseRef.current = null
     liveFaceRef.current = null
@@ -957,13 +982,30 @@ function App() {
 
             {challengePhase === 'result' && (
               <div className="result-form">
-                <div className="result-photo">
-                  {resultPhoto ? <img src={resultPhoto} alt="도전 종료 순간의 웹캠 사진" /> : <span><VideoCamera /> 사진 저장 중</span>}
+                <div className="result-photo-picker">
+                  <span>순위에 저장할 화면</span>
+                  <div role="group" aria-label="순위 사진 종류">
+                    <button type="button" className={rankingPhotoSource === 'webcam' ? 'active' : ''} aria-pressed={rankingPhotoSource === 'webcam'} onClick={() => setRankingPhotoSource('webcam')}>
+                      <VideoCamera weight="duotone" /> 캠 화면
+                    </button>
+                    <button type="button" className={rankingPhotoSource === 'avatar' ? 'active' : ''} aria-pressed={rankingPhotoSource === 'avatar'} onClick={() => setRankingPhotoSource('avatar')}>
+                      <Robot weight="duotone" /> 캐릭터 화면
+                    </button>
+                  </div>
+                </div>
+                <div className={`result-photo ${rankingPhotoSource}`}>
+                  {rankingPhotoSource === 'webcam'
+                    ? resultWebcamPhoto
+                      ? <img src={resultWebcamPhoto} alt="도전 종료 순간의 캠 화면" />
+                      : <span><VideoCamera /> 캠 화면 저장 중</span>
+                    : resultAvatarPhoto
+                      ? <img src={resultAvatarPhoto} alt="도전 종료 순간의 캐릭터 화면" />
+                      : <span><Robot /> 캐릭터 화면 저장 중</span>}
                   <strong>{finalScore}%</strong>
                 </div>
                 <label htmlFor="player-name">순위에 표시할 이름</label>
                 <input id="player-name" value={playerName} maxLength={16} onChange={(event) => setPlayerName(event.target.value)} placeholder="이름을 입력하세요" autoComplete="nickname" />
-                <button className="primary-game-button" type="button" onClick={saveResult} disabled={!playerName.trim() || !resultPhoto}><FloppyDisk weight="bold" /> 순위에 저장</button>
+                <button className="primary-game-button" type="button" onClick={saveResult} disabled={!playerName.trim() || !(rankingPhotoSource === 'webcam' ? resultWebcamPhoto : resultAvatarPhoto)}><FloppyDisk weight="bold" /> 순위에 저장</button>
                 <button className="secondary-game-button" type="button" onClick={startChallenge}>다시 도전</button>
               </div>
             )}

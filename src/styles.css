@@ -783,8 +783,30 @@ legend { margin-bottom: 10px; color: #52605b; font-size: 11px; font-weight: 800;
 .secondary-game-button { border: 1px solid #c9d6d0; color: #53615b; background: #fff; }
 
 .result-form { display: grid; gap: 10px; margin-top: auto; }
+.result-photo-picker { display: grid; gap: 6px; }
+.result-photo-picker > span { color: #53615b; font-size: 10px; font-weight: 800; }
+.result-photo-picker > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.result-photo-picker button {
+  min-width: 0;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid #c4d2cc;
+  border-radius: 10px;
+  color: #5c6c65;
+  background: #f7faf8;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+.result-photo-picker button svg { width: 16px; height: 16px; }
+.result-photo-picker button.active { color: #f4fff9; border-color: var(--accent); background: var(--accent); box-shadow: 0 7px 16px rgba(8, 127, 91, .14); }
 .result-photo { position: relative; min-height: 122px; overflow: hidden; border-radius: 14px; background: #dce7e2; }
 .result-photo img { width: 100%; height: 150px; display: block; object-fit: cover; }
+.result-photo.avatar img { object-fit: contain; background: #ceddd6; }
 .result-photo > span { min-height: 122px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #66756f; font-size: 10px; }
 .result-photo > span svg { width: 18px; }
 .result-photo > strong { position: absolute; right: 10px; bottom: 9px; padding: 7px 10px; border-radius: 9px; color: #fff; background: rgba(20, 42, 34, .82); font-family: "Bahnschrift", sans-serif; font-size: 18px; }
@@ -1067,9 +1089,12 @@ legend { margin-bottom: 10px; color: #52605b; font-size: 11px; font-weight: 800;
   .challenge-score { border-bottom-color: #465b52; }
   .challenge-waiting { border-color: #60766d; }
   .secondary-game-button, .result-form input { color: #e5efeb; background: #26362f; border-color: #52685f; }
-  .result-form label { color: #b3c2bc; }
+  .result-form label, .result-photo-picker > span { color: #b3c2bc; }
+  .result-photo-picker button { color: #b3c2bc; border-color: #52685f; background: #26362f; }
+  .result-photo-picker button.active { color: #effbf6; border-color: var(--accent); background: var(--accent); }
   .result-form input::placeholder { color: #9dafa8; }
   .result-photo { background: #293a33; }
+  .result-photo.avatar img { background: #1e2d27; }
   .ranking-row:first-child { color: #effbf6; background: var(--accent); }
   .rank-photo { background: #31443c; }
   .rank-person small { color: #a1b1aa; }
