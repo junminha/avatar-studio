@@ -420,7 +420,7 @@ function App() {
     const twoDigits = (value: number) => String(value).padStart(2, '0')
     const timestamp = `${now.getFullYear()}${twoDigits(now.getMonth() + 1)}${twoDigits(now.getDate())}-${twoDigits(now.getHours())}${twoDigits(now.getMinutes())}${twoDigits(now.getSeconds())}`
     const link = document.createElement('a')
-    link.download = `morph-avatar-${timestamp}.png`
+    link.download = `pose-quiz-aik-${timestamp}.png`
     link.href = canvas.toDataURL('image/png')
     link.click()
     setCaptureSaved(true)
@@ -540,9 +540,9 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#studio" aria-label="MORPH 홈">
+        <a className="brand" href="#studio" aria-label="문제맞추기AIK 홈">
           <span className="brand-mark"><Sparkle weight="fill" /></span>
-          <span>MORPH.</span>
+          <span>문제맞추기AIK</span>
         </a>
         <nav className="mode-nav" aria-label="스튜디오 메뉴">
           <button type="button" className={studioMode === 'customize' ? 'active' : ''} onClick={() => selectMode('customize')}>꾸미기</button>
@@ -562,7 +562,7 @@ function App() {
           <section className="hall-of-fame" aria-labelledby="hall-title">
             <header className="hall-header">
               <div>
-                <p className="hall-eyebrow"><Trophy weight="fill" /> MORPH POSE ARCHIVE</p>
+                <p className="hall-eyebrow"><Trophy weight="fill" /> AIK POSE ARCHIVE</p>
                 <h1 id="hall-title">명예의 전당</h1>
                 <p>가장 정확하게 로봇과 호흡을 맞춘 순간들입니다. 기록을 누르면 도전 사진을 크게 볼 수 있어요.</p>
               </div>
